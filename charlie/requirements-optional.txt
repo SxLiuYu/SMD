@@ -7,3 +7,4 @@ soundfile           # 音频文件读写
 vosk                # 离线 ASR 降级（英文小模型）
 opuslib>=3.0.1      # Opus 编解码（ESP32 双向音频）
 sherpa_onnx         # SenseVoice 本地 ASR（26ms vs 百度 327ms，需模型文件）
+paho-mqtt>=2.0

@@ -298,7 +298,7 @@ _xiaozhi_lock = threading.Lock()
 
 # 待推送队列：ESP32未连接时暂存，连接时flush
 _xiaozhi_pending: list[dict] = []  # [{"text": str, "mp3": bytes, "ts": float}]
-_PENDING_TTL = 120  # 2分钟内的待推项才补发
+_PENDING_TTL = 300  # 5分钟内的待推项才补发（给MQTT wake + ESP32建连留余量）
 
 
 def register_xiaozhi_client(client_id: str, ws, loop) -> None:

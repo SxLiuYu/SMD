@@ -75,7 +75,7 @@ SILENCE_RMS_DEFAULT = 150   # fallback before a noise baseline exists
 # dropped silently so the device never talks on its own. Receiving a valid
 # command refreshes the window, keeping a normal back-and-forth alive.
 # 0 disables the gate.
-ARM_WINDOW = 30.0
+ARM_WINDOW = 30.0  # 对话连续窗口（主动推送由MQTT信令触发，不绑架此值）
 # After a wake (listen/detect) the device's own speaker beep + the wake word
 # itself can momentarily re-trigger our endpointing. Ignore fresh hot frames
 # for this long so the acknowledgement tone and echo settle before the mic
@@ -894,7 +894,7 @@ def register_xiaozhi_routes(app: FastAPI):
                             cand = (cand.get("device_id") or cand.get("mac")
                                     or cand.get("client_id") or cand.get("name"))
                         if cand:
-                            device_key = re.sub(r"[^0-9A-Za-z_-]", "", str(cand))[:32] or device_key
+                            device_key = re.sub(r"[^09A-Za-z_-]", "", str(cand))[:32] or device_key
                             break
                     await send_json({
                         "type": "hello",
@@ -909,7 +909,7 @@ def register_xiaozhi_routes(app: FastAPI):
                             "frame_duration": OPUS_FRAME_DURATION_MS,
                         },
                     })
-                    log.info("[xiaozhi] hello done, session=%s", session_id)
+                    log.info("[xiaozhi] hello done, session=%s device=%s", session_id, device_key)
 
                 elif mtype == "listen":
                     if state == "detect":

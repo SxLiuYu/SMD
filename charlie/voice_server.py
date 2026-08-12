@@ -806,9 +806,16 @@ def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
         log.info(f"[xiaozhi-push] 直推 {pushed} 个设备: {text[:30]}")
         return
 
-    # 2. 本进程无连接 → 入队待 flush（ESP32 重连时补发）
+    # 2. 本进程无连接 → 入队待 flush + MQTT 摇醒 + HTTPS 转发
     qsize = enqueue_xiaozhi_pending(text, mp3_data)
     log.info(f"[xiaozhi-push] ESP32未连接，入队({qsize}): {text[:30]}")
+
+    # 2a. MQTT wake — 摇 ESP32 主动建 WS（秒级响应）
+    try:
+        from app.mqtt_push import publish_wake
+        publish_wake(reason="reminder")
+    except Exception:
+        pass  # MQTT 未配置时静默跳过
 
     # 3. 同时转发到 HTTPS 进程（ESP32 可能连 8443）
     try:

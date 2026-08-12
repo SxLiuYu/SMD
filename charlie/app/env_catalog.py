@@ -185,6 +185,14 @@ ENTRIES: list[EnvEntry] = [
     EnvEntry("ESP32_OTA_IP", group="esp32",
              description="OTA 返回给 ESP32 的服务器 IP（默认空=自动探测 LAN IP）"),
 
+    # --- mqtt（ESP32 主动推送信令通道） ---
+    EnvEntry("MQTT_BROKER", group="mqtt",
+             description="MQTT broker 地址（本地 mosquitto 或公网 EMQX）"),
+    EnvEntry("MQTT_PORT", group="mqtt", default="1883",
+             description="MQTT broker 端口"),
+    EnvEntry("MQTT_DEVICE_ID", group="mqtt", default="esp32-default",
+             description="ESP32 设备 ID（固件 hello 上报的 chip_id，用于 MQTT topic 路由）"),
+
     # --- ecommerce ---
     EnvEntry("TAVILY_API_KEY", group="ecommerce", secret=True,
              get_guide="https://tavily.com",
