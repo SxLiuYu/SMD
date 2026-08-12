@@ -2,12 +2,15 @@
 from mcp.server.fastmcp import FastMCP
 from mcp_common import NCM_BIN, _ensure_https
 import subprocess, json as _json, random
+import logging
+log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-music")
 
 
 @mcp.tool()
 def search_music(keyword: str, limit: int = 5) -> str:
+    log.debug(f"[music] search_music(query={query})")
     """搜索网易云音乐歌曲。keyword=歌名或歌手名, limit=返回条数(默认5)
 
     例: search_music("周杰伦 晴天") → 搜索周杰伦的晴天
@@ -33,6 +36,7 @@ def search_music(keyword: str, limit: int = 5) -> str:
 
 @mcp.tool()
 def play_music(keyword: str = "", song_id: int = 0) -> str:
+    log.info(f"[music] play_music(query={query})")
     """播放音乐。keyword=歌名或歌手名(搜索后播放第一首), song_id=歌曲ID(直接播放)
 
     例: play_music("周杰伦 晴天") → 搜索并播放周杰伦的晴天

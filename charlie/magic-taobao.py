@@ -4,6 +4,8 @@
 """
 import os, json, requests, re
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
@@ -15,6 +17,7 @@ mcp = FastMCP("magic-taobao")
 
 @mcp.tool()
 def search_products(keyword: str, count: int = 5) -> str:
+    log.debug(f"[taobao] search_products(query={query})")
     """搜索淘宝商品。keyword=商品关键词, count=返回条数(最多10)
 
     例: search_products("手机壳") → 搜索手机壳

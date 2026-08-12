@@ -10,7 +10,8 @@ from contextlib import contextmanager
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
-except ImportError: pass
+except ImportError:
+    log.debug("[voice_agent] python-dotenv 未安装，跳过 .env 加载")
 
 log = logging.getLogger("magic")
 
@@ -167,7 +168,7 @@ def _build_brain(mcp_set="all"):
         import psutil
         mem = psutil.virtual_memory()
         if mem.percent > 90:
-            raise RuntimeError(f"内存不足({mem.percent}%), 拒绝构建大脑防OOM")
+            log.error(f"[brain] 内存不足({mem.percent}%)，拒绝构建大脑防OOM"); raise RuntimeError(f"内存不足({mem.percent}%), 拒绝构建大脑防OOM")
         log.info(f"[brain] 内存检查通过: {mem.percent}% ({(mem.total-mem.available)//1073741824:.1f}GB可用)")
     except ImportError:
         pass
@@ -896,6 +897,7 @@ def brain(text: str, session_id: str = "default") -> str:
     重构后（#1）：快路径逻辑移入 FastPath handler，brain() 只做 dispatch + LLM fallback。
     """
     # 快路径 1: 智能语音快捷命令
+    log.debug(f"[brain] 收到请求: {text[:50]}")
     _cmd_reply = _handle_smart_command(text)
     if _cmd_reply is not None:
         _append_history(_get_history(session_id), text, _cmd_reply)

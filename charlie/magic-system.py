@@ -1,10 +1,13 @@
 """magic-system: 系统控制 (3个工具: 音量/语速/状态)"""
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 mcp = FastMCP("magic-system")
 
 
 @mcp.tool()
 def set_volume(level: int = -1) -> str:
+    log.info(f"[system] set_volume(level={level})")
     """控制系统音量。level=0-100(百分比), 不传或-1=当前音量
 
     例: set_volume(50) → 音量调到50%

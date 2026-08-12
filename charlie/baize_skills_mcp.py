@@ -4,6 +4,8 @@
 """
 import os, requests
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()

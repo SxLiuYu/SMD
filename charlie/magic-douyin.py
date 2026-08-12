@@ -4,6 +4,8 @@
 """
 import os, json, requests, re
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
@@ -15,6 +17,7 @@ mcp = FastMCP("magic-douyin")
 
 @mcp.tool()
 def search_videos(keyword: str, count: int = 5) -> str:
+    log.debug(f"[douyin] search_videos(query={query})")
     """搜索抖音视频。keyword=搜索词, count=返回条数
 
     例: search_videos("美食教程") → 搜索抖音美食视频

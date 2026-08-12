@@ -92,7 +92,8 @@ def _to_wav_tempfile(data: bytes, ext: str) -> bytes:
     finally:
         for p in (inp, out):
             try: os.unlink(p)
-            except: pass
+            except Exception:
+                pass  # 清理临时文件失败不影响主流程
 
 def _wav_to_mp3(wav_data: bytes, bitrate: str = "32k") -> bytes:
     """WAV音频转MP3(语音级32kbps,约6x压缩), 管道模式"""
@@ -120,4 +121,5 @@ def _wav_to_mp3_tempfile(wav_data: bytes, bitrate: str = "32k") -> bytes:
     finally:
         for p in (inp, out):
             try: os.unlink(p)
-            except: pass
+            except Exception:
+                pass  # 清理临时文件失败不影响主流程

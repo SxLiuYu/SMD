@@ -15,6 +15,8 @@ v2 改进:
 from mcp.server.fastmcp import FastMCP
 import os, json, datetime, re, threading, time, hashlib
 from collections import defaultdict
+import logging
+log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-memory")
 

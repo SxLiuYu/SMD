@@ -3,11 +3,14 @@ from mcp.server.fastmcp import FastMCP
 from mcp_common import aliyun_chat, _safe_math_eval, ESP32_IP
 from datetime import datetime
 import os, requests
+import logging
+log = logging.getLogger("magic")
 mcp = FastMCP("magic-info")
 
 
 @mcp.tool()
 def get_current_time() -> str:
+    log.debug("[info] get_current_time 被调用")
     """获取当前时间、日期和星期"""
     now = datetime.now()
     w = ['一','二','三','四','五','六','日'][now.weekday()]
@@ -16,6 +19,7 @@ def get_current_time() -> str:
 
 @mcp.tool()
 def get_detailed_weather(city: str = "北京") -> str:
+    log.debug(f"[info] get_detailed_weather(city={city})")
     """获取详细天气预报，包括今天白天/夜间天气、温度、逐小时预报和穿衣建议。
 
     例: get_detailed_weather() → 返回今天详细天气+穿衣建议

@@ -311,6 +311,7 @@ def _execute_step(step: dict) -> str:
 
 
 def match_protocol(text: str) -> str | None:
+    log.debug(f"[scenes] match_protocol(text={text[:30]})")
     """检查文本是否匹配某个 Protocol 的触发词, 返回 protocol key 或 None"""
     protocols = _load_protocols()
     for key, proto in protocols.items():
@@ -321,6 +322,7 @@ def match_protocol(text: str) -> str | None:
 
 
 def execute_protocol(key: str) -> str:
+    log.info(f"[scenes] execute_protocol(key={key})")
     """执行指定 Protocol, 返回结果摘要"""
     protocols = _load_protocols()
     proto = protocols.get(key)

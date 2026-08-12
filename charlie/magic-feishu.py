@@ -4,6 +4,8 @@
 """
 import os, json, requests, time
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
@@ -64,6 +66,7 @@ def search_docs(query: str, count: int = 5) -> str:
 
 @mcp.tool()
 def send_message(user_id: str, text: str) -> str:
+    log.info(f"[feishu] send_message(to={user_id})")
     """发送飞书消息。user_id=用户ID或open_id, text=消息内容
 
     例: send_message("ou_xxx", "会议改到下午3点") → 给指定用户发消息

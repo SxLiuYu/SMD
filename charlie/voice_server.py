@@ -21,7 +21,8 @@ if not getattr(sys, 'frozen', False):
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
-except ImportError: pass
+except ImportError:
+        log.debug("[voice_server] python-dotenv 未安装")
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, HTMLResponse, JSONResponse, StreamingResponse
@@ -169,6 +170,8 @@ def _validate_env():
         log.info(line)
 
     missing = env_catalog.missing_required()
+    if missing:
+        log.warning(f"[env] 缺少{len(missing)}个必需密钥: {[e.name for e in missing]}")
     if env_catalog.demo_mode_active():
         log.warning("━━━ Demo 模式已启用 ━━━")
         log.warning("未配置 ARK_KEY，大脑将使用 Ollama 本地模型（qwen3.5:2b）。")
@@ -1203,7 +1206,9 @@ def _process_wake_command(wav_bytes: bytes):
 def _start_proactive():
     global _proactive_thread
     if _proactive_thread is not None and _proactive_thread.is_alive():
+        log.debug("[proactive] 已在运行，跳过")
         return
+    log.info("[proactive] 启动主动建议守护线程")
     _proactive_thread = threading.Thread(target=_proactive_suggestions, daemon=True)
     _proactive_thread.start()
 
@@ -1692,7 +1697,8 @@ async def wakecheck_api(file: UploadFile = File(...)):
             text_lower = text.lower().strip()
             matched = any(w in text_lower for w in _VOSK_WAKE_WORDS)
             return {"wake": matched, "text": text}
-        except:
+        except Exception as _e:
+            log.debug(f"[wake] Vosk唤醒检测异常: {_e}")
             return {"wake": False, "text": ""}
     try:
         from vosk import KaldiRecognizer

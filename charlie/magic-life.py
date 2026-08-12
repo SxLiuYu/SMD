@@ -2,11 +2,14 @@
 from mcp.server.fastmcp import FastMCP
 from mcp_common import ESP32_IP
 import os, requests
+import logging
+log = logging.getLogger("magic")
 mcp = FastMCP("magic-life")
 
 
 @mcp.tool()
 def open_lifestyle_app(intent: str, keyword: str = "") -> str:
+    log.info(f"[life] open_lifestyle_app(intent={intent})")
     """打开生活服务App(手机点击唤起到搜索/下单页)。intent: waimai外卖/food餐厅/shopping购物/grocery买菜/pharmacy买药/ride打车, keyword: 搜索词"""
     from urllib.parse import quote
     q = quote(keyword or "")

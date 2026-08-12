@@ -1,10 +1,13 @@
 """magic-reminder: 提醒/定时器/日历 (3个工具)"""
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 mcp = FastMCP("magic-reminder")
 
 
 @mcp.tool()
 def add_reminder(text: str, time: str = "", repeat: str = "") -> str:
+    log.info(f"[reminder] add_reminder(text={text}, time={time_str})")
     """添加提醒。text=提醒内容, time=时间(如'下午3点'/'30分钟后'/'每天8点'), repeat=重复类型(daily/weekly/weekdays, 留空=一次性)
 
     repeat 值:

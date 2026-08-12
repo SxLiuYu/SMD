@@ -4,6 +4,8 @@
 """
 import os, json
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:

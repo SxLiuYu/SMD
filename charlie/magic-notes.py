@@ -1,11 +1,14 @@
 """magic-notes: 备忘录 (2个工具)"""
 from mcp.server.fastmcp import FastMCP
 import os
+import logging
+log = logging.getLogger("magic")
 mcp = FastMCP("magic-notes")
 
 
 @mcp.tool()
 def save_note(title: str = "", content: str = "") -> str:
+    log.info(f"[notes] save_note(title={title})")
     """保存语音备忘录。title=标题(可选，自动生成), content=内容
 
     例: save_note("明天带身份证") → 保存到备忘录目录

@@ -5,6 +5,8 @@ Charlie 的自进化能力：从对话中学习，越用越懂你。
 from mcp.server.fastmcp import FastMCP
 import os, json, datetime, re, hashlib, time, threading
 from collections import Counter, defaultdict
+import logging
+log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-evolution")
 
@@ -161,6 +163,7 @@ def _extract_patterns(messages: list) -> dict:
 
 @mcp.tool()
 def learn_from_history() -> str:
+    log.info("[evolution] learn_from_history 被调用")
     """从对话历史中学习用户偏好和习惯（自进化核心）
 
     分析所有历史对话，提取高频话题和问题，自动建议偏好设置。

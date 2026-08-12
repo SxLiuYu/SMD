@@ -13,6 +13,8 @@
 import os, json, random, re
 from datetime import datetime, timedelta
 from mcp.server.fastmcp import FastMCP
+import logging
+log = logging.getLogger("magic")
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -253,6 +255,7 @@ def search_recipe(keyword: str) -> str:
 
 @mcp.tool()
 def get_recipe(name: str) -> str:
+    log.debug(f"[recipe] get_recipe(name={name})")
     """查菜谱完整做法(本地346道菜优先，找不到用AI生成)。
 
     参数:

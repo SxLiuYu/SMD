@@ -9,6 +9,8 @@
 """
 from mcp.server.fastmcp import FastMCP
 import os, json, datetime, time, re
+import logging
+log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-summary")
 

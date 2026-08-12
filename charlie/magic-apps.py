@@ -8,6 +8,8 @@
 import json, os, time
 from mcp.server.fastmcp import FastMCP
 from ego_lite_client import EgoClient, EgoError
+import logging
+log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-apps")
 

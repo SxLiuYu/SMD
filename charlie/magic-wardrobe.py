@@ -12,6 +12,8 @@
 """
 from mcp.server.fastmcp import FastMCP
 import os, json, requests, datetime, re
+import logging
+log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-wardrobe")
 

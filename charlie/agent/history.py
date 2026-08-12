@@ -161,7 +161,8 @@ def _save_history() -> None:
             finally:
                 if tmp_path:
                     try: os.unlink(tmp_path)
-                    except OSError: pass
+                    except OSError as _e:
+                        log.debug(f"[history] 临时文件清理失败: {_e}")
     except Exception as e:
         log.error(f"[history] 保存失败: {e}")
 

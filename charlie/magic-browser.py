@@ -11,6 +11,8 @@
 import json, os, re
 from mcp.server.fastmcp import FastMCP
 from ego_lite_client import EgoClient, EgoError
+import logging
+log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-browser")
 
@@ -44,6 +46,7 @@ def _run_ego(code: str, timeout: int = 30) -> dict:
 
 @mcp.tool()
 def browse_page(url: str) -> str:
+    log.debug(f"[browser] browse(url={url[:50]})")
     """打开网页并读取页面内容。url=完整网址(含https://)
 
     例: browse_page("https://www.baidu.com") → 打开百度并读取内容
