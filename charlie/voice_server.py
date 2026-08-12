@@ -707,7 +707,6 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
     delivery_error = ""
     try:
         from voice_agent import tts_to_mp3
-        _add_notification(text, "reminder")
         log.info(f"[reminder] TTS生成: {text}")
         audio = tts_to_mp3(f"主人，提醒您：{text}")
         if not audio or len(audio) < 100:
