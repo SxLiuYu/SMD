@@ -933,10 +933,10 @@ class FastPath:
 
     重构后（#1）：从 brain() 的 6 条内联 if 提取为可注册的 handler 链。
     """
-    def __init__(self, name: str, keywords: tuple, handler, exclude: tuple = ()):
+    def __init__(self, name: str, keywords: tuple, handler_name: str, exclude: tuple = ()):
         self.name = name
         self.keywords = keywords
-        self.handler = handler
+        self.handler_name = handler_name  # 函数名字符串，运行时动态查找
         self.exclude = exclude
 
     def match(self, text: str) -> bool:
@@ -952,7 +952,14 @@ class FastPath:
             return None
         log.info(f"[{self.name}] 关键词命中: {text[:20]}")
         try:
-            reply = self.handler(text)
+            # 运行时动态查 handler（允许测试 patch）
+            import sys
+            _module = sys.modules[__name__]
+            handler = getattr(_module, self.handler_name)
+            reply = handler(text)
+        except AttributeError:
+            log.warning(f"[{self.name}] handler '{self.handler_name}' 不存在")
+            return None
         except Exception as e:
             log.warning(f"[{self.name}] handler 异常: {e}")
             return None
@@ -984,17 +991,17 @@ def _scene_protocol_handler(text: str) -> str | None:
 
 # 快路径链：顺序执行，先命中先返回
 FAST_PATHS = [
-    FastPath("time", ('几点', '几点啦'), _time_handler),
+    FastPath("time", ('几点', '几点啦'), "_time_handler"),
     FastPath("ac", ('空调', '制冷', '制热', '除湿', '开空调', '调温度', '温度调', '高风', '中风', '低风', '风速'),
-             _direct_ac_control, exclude=('天气',)),
+             "_direct_ac_control", exclude=('天气',)),
     FastPath("weather", ('天气', '气温', '下雨', '下雪', '温度', '几度', '穿什么', '今天冷', '今天热', '冷不冷', '热不热'),
-             _direct_weather_play),
+             "_direct_weather_play"),
     FastPath("music", ('播放音乐', '播放歌', '随机播放', '放歌', '放一首', '放个', '唱首歌', '放音乐', '来首歌', '来一首', '播一首', '听歌', '点歌', '点一首', '我想听', '我要听', '播放', '来首', '放首', '循环', '单曲'),
-             _direct_music_play),
+             "_direct_music_play"),
     FastPath("vision", ('看看屏幕', '看看屏幕上', '截屏', '截图分析', '帮我看看屏幕', '屏幕上有什么', '屏幕上显示'),
-             _direct_vision_analyze),
-    FastPath("scene", ('晚安', '早安', '早安', '早上好', '电影', '看电影', '出门', 'leaving_home', 'movie_time'),
-             _scene_protocol_handler),
+             "_direct_vision_analyze"),
+    FastPath("scene", ('晚安', '早安', '早上好', '电影', '看电影', '出门', 'leaving_home', 'movie_time'),
+             "_scene_protocol_handler"),
 ]
 
 
