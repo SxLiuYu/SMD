@@ -79,7 +79,7 @@ bash scripts/download-models.sh  # 下载 237MB 模型到 models/sense-voice/
 
 模型缺失时自动降级百度 ASR（327ms）。
 
-## ESP32 手表
+## ESP32 开发板
 
 见 `docs/ESP32.md`。
 

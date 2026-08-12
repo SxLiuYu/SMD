@@ -25,7 +25,7 @@ h1{font-size:22px;margin-bottom:6px}h1 .icon{font-size:24px}
 <body>
 <div class="card">
 <h1><span class="icon">⌚</span> ESP32 烧录向导</h1>
-<p class="subtitle">配置 WiFi 和服务器地址，烧录到手表固件</p>
+<p class="subtitle">配置 WiFi 和服务器地址，烧录到开发板固件</p>
 
 <div id="status" class="status"></div>
 <div class="field">
@@ -80,7 +80,7 @@ async function pollStatus(){
       const r=await fetch('/api/esp32/flash-status');const d=await r.json();
       if(d.done){
         if(d.error){st.className='status err';st.textContent='❌ 烧录失败: '+d.error}
-        else{st.className='status ok';st.textContent='✅ 烧录完成！'+(d.connectivity?' 手表可连接。':'')}
+        else{st.className='status ok';st.textContent='✅ 烧录完成！'+(d.connectivity?' 开发板可连接。':'')}
         btn.disabled=false;btn.textContent='开始烧录';
       }else{st.textContent='烧录中... '+(d.progress||'');setTimeout(poll,2000)}
     }catch(e){setTimeout(poll,2000)}

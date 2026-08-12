@@ -4,6 +4,8 @@
 # Editor
 .vscode/
 .idea/
+.opencode/
+.zcode/
 
 # Python
 __pycache__/
@@ -22,6 +24,22 @@ tunnel_url.txt
 audio_000.wav
 logs/
 workspace/
+data/
+notes/
+*.json.lock
+decision_history.json
+episodic_memories.json
+pushed_hot_topics.json
+snapshot.json
+pending_confirmation.json
+
+# 构建产物
+build/
+dist/
+*.zip
+*.aiff
+charlie/web/vosk/
+charlie/skills/mimo-vision/
 
 # Baize build artifacts (source code IS tracked)
 Baize/node_modules/
@@ -30,3 +48,7 @@ Baize/data/
 Baize/logs/
 Baize/coverage/
 Baize/.env
+
+# 营销文案（本地保留，不提交 Git 仓库）
+docs/social-media-帖子内容.md
+docs/social-media/

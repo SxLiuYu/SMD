@@ -1,6 +1,6 @@
-# ESP32 手表终端配置指南
+# ESP32 开发板终端配置指南
 
-Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 手表（xiaozhi v2.1.0 协议），流式语音对话。
+Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 开发板（xiaozhi v2.1.0 协议），流式语音对话。
 
 ## 硬件
 
@@ -12,7 +12,7 @@ Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 手表（xiaozhi v2.1.0 协议）�
 
 ## 烧录（网页向导）
 
-1. 手表插 USB 连 Mac
+1. 开发板插 USB 连 Mac
 2. 打开 `http://localhost:8000/esp32-setup`
 3. 点击「检测串口」→ 选择 `/dev/cu.usbmodem*`
 4. 输入 WiFi SSID / 密码 / Charlie 运行的 Mac IP

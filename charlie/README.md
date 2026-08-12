@@ -1,6 +1,6 @@
 # Charlie 语音助手
 
-> 本地运行的私人 AI 语音助手。ASR→大脑→TTS 语音闭环，支持 ESP32 手表终端、浏览器、飞书推送。
+> 本地运行的私人 AI 语音助手。ASR→大脑→TTS 语音闭环，支持 ESP32 开发板终端、浏览器、飞书推送。
 
 ## 5 分钟快速上手
 
@@ -57,14 +57,14 @@ docker compose up -d
 
 启动后访问 `http://localhost:8000/setup` 用网页填写，按分组展示每个 key 状态。
 
-## ESP32 手表终端
+## ESP32 开发板终端
 
-Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 手表（xiaozhi 协议）：
+Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 开发板（xiaozhi 协议）：
 
-1. 手表插 USB 连 Mac
+1. 开发板插 USB 连 Mac
 2. 打开 `http://localhost:8000/esp32-setup`
 3. 检测串口 → 输入 WiFi/服务器 IP → 烧录
-4. 手表自动连接 Charlie，语音对话
+4. 开发板自动连接 Charlie，语音对话
 
 > 烧录向导自动 patch 固件 NVS 里的 WiFi/服务器地址，不重新编译固件。
 > 详见 `docs/ESP32.md`

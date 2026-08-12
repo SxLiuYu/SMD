@@ -1,6 +1,6 @@
 # Charlie 语音助手
 
-> 本地运行的私人 AI 语音助手。ASR → 大脑 LLM → TTS 完整语音闭环，支持 ESP32 手表终端、浏览器、飞书消息推送。
+> 本地运行的私人 AI 语音助手。ASR → 大脑 LLM → TTS 完整语音闭环，支持 ESP32 开发板终端、浏览器、飞书消息推送。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
@@ -20,7 +20,7 @@
 | ASR 语音识别（百度 / 本地 SenseVoice） | ✅ 降级 | ✅ 可选本地 |
 | TTS 语音合成 | ✅ 降级 | ✅ 完整 |
 | MCP 工具（飞书/抖音/淘宝/空调/音乐） | ❌ | ✅ 19 个 |
-| ESP32 手表语音终端 | ❌ | ✅ |
+| ESP32 开发板语音终端 | ❌ | ✅ |
 | HTTPS 手机访问 | ❌ | ✅ |
 
 **升级路径**：Demo（零配置）→ Ollama 离线 LLM → 填 Key 完整模式，三步渐进解锁。
@@ -127,9 +127,9 @@ python3 https_server.py   # 自动生成自签证书
 
 ---
 
-## ⌚ ESP32 手表终端
+## ⌚ ESP32 开发板终端
 
-Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 手表（xiaozhi 协议），实现独立的语音对话终端。
+Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 开发板（xiaozhi 协议），实现独立的语音对话终端。
 
 **支持型号**：`lc-s3-wifi-1.54tft`（LC-S3 1.54 寸圆形 TFT）  
 **固件**：xiaozhi v2.1.0，16MB flash，ST7789 240×240 SPI 屏
@@ -137,10 +137,10 @@ Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 手表（xiaozhi 协议），实现
 **烧录（网页向导）**：
 
 ```
-1. 手表插 USB 连 Mac
+1. 开发板插 USB 连 Mac
 2. 浏览器打开 http://localhost:8000/esp32-setup
 3. 检测串口 → 输入 WiFi SSID/密码/Charlie IP → 开始烧录
-4. 烧录完成后手表自动连接，语音对话
+4. 烧录完成后开发板自动连接，语音对话
 ```
 
 > 烧录向导自动 patch 固件 NVS 里的 WiFi/服务器地址，无需重新编译固件。  
@@ -153,7 +153,7 @@ Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 手表（xiaozhi 协议），实现
 ## 🏗️ 架构概览
 
 ```
-用户浏览器 / ESP32 手表 (xiaozhi WS)
+用户浏览器 / ESP32 开发板 (xiaozhi WS)
         ↓
   voice_server.py (FastAPI, port 8000)
     ├── ASR: 百度 / 本地 SenseVoice（26ms vs 327ms）

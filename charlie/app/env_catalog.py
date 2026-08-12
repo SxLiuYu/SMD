@@ -75,7 +75,7 @@ GROUP_ORDER = [
     "asr_local",     # SenseVoice 本地 ASR
     "feishu",        # 飞书消息/推送
     "tuya",          # 涂鸦红外空调
-    "esp32",         # ESP32 手表终端
+    "esp32",         # ESP32 开发板终端
     "ecommerce",     # 搜索/购物分析
     "push",          # 个性化热点推送
     "system",        # 鉴权/端口/CORS/多用户
@@ -88,7 +88,7 @@ GROUP_LABELS = {
     "asr_local": "本地 ASR（可选，加速语音识别）",
     "feishu": "飞书（消息推送/文档）",
     "tuya": "涂鸦红外空调控制",
-    "esp32": "ESP32 手表终端",
+    "esp32": "ESP32 开发板终端",
     "ecommerce": "搜索与购物分析",
     "push": "个性化热点推送",
     "system": "运行时系统配置",
@@ -166,9 +166,9 @@ ENTRIES: list[EnvEntry] = [
              group="tuya", tunable=True,
              description="涂鸦 2B API 基址"),
 
-    # --- esp32（手表终端） ---
+    # --- esp32（开发板终端） ---
     EnvEntry("ESP32_IP", group="esp32",
-             description="ESP32 手表局域网 IP（缺失则 ESP32 相关功能不可用）"),
+             description="ESP32 开发板局域网 IP（缺失则 ESP32 相关功能不可用）"),
     EnvEntry("ESP32_OTA_IP", group="esp32",
              description="OTA 返回给 ESP32 的服务器 IP（默认空=自动探测 LAN IP）"),
 
