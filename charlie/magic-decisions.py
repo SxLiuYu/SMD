@@ -17,8 +17,8 @@ FEEDBACK_FILE = os.path.join(DATA_DIR, "decision_feedback.json")
 PENDING_FILE = os.path.join(DATA_DIR, "pending_confirmation.json")
 _decision_lock = threading.Lock()
 
-# 冷却时间: 每个决策每天最多触发一次
-_COOLDOWN_HOURS = 24
+# 冷却时间: 每个决策每12小时最多触发一次（24h太长，会错过当天窗口）
+_COOLDOWN_HOURS = 12
 # 反馈阈值: 负面反馈率超过此值, 该规则将被跳过
 _NEGATIVE_FEEDBACK_THRESHOLD = 0.6
 # 确认等待窗口: 秒
@@ -103,6 +103,17 @@ _DECISION_RULES = [
             "extra_check": "calendar_check",
         },
         "action": {"type": "tts", "text": "您有一个会议即将开始。"},
+        "confirm": False,
+    },
+    {
+        "id": "casual_checkin",
+        "priority": 10,
+        "condition": {
+            "states": ["home_awake", "working", "home_resting", "unknown"],
+            "hours": (9, 22),
+            "check_desc": "长时间无互动，随机问候",
+        },
+        "action": {"type": "tts", "text": ""},
         "confirm": False,
     },
 ]
@@ -342,6 +353,7 @@ def evaluate(user_state: dict, protocol_executor=None) -> list:
     """评估当前状态, 返回需要执行的决策列表(按优先级排序, 跳过负面反馈规则)"""
     decisions = []
     state = user_state.get("state", "unknown")
+    now_ts = time.time()
     hour = datetime.datetime.now().hour
     history = _load_decision_history()
 
@@ -378,6 +390,24 @@ def evaluate(user_state: dict, protocol_executor=None) -> list:
         if not _check_cooldown(rule["id"], history):
             continue
         # 4. 额外检查
+        if rule["id"] == "casual_checkin":
+            # 随机问候：4小时未互动才触发，且随机概率避免每2分钟都试
+            import random as _rand
+            last_brain = history.get("casual_checkin", {}).get("last_trigger", 0)
+            if now_ts - last_brain < 4 * 3600:  # 4小时冷却
+                continue
+            if _rand.random() > 0.3:  # 30% 概率触发，避免每次评估都搭话
+                continue
+            greetings = [
+                "好久没聊了，最近怎么样？",
+                "嘿，有什么需要我帮忙的吗？",
+                "我在呢，随时可以聊。",
+                "刚想到一个有趣的事想跟你说。",
+                "你还在忙吗？要不要休息一下？",
+            ]
+            rule = dict(rule)
+            rule["action"] = dict(rule["action"])
+            rule["action"]["text"] = _rand.choice(greetings)
         if cond.get("extra_check") == "deadline_check":
             deadline = _deadline_check()
             if not deadline:
