@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESP32 烧录向导</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,sans-serif;background:#0f0f17;color:#e0e0e0;min-height:100vh;display:flex;justify-content:center;padding:20px}
+.card{background:#1a1a2e;border-radius:16px;padding:32px;max-width:560px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+h1{font-size:22px;margin-bottom:6px}h1 .icon{font-size:24px}
+.subtitle{color:#888;font-size:14px;margin-bottom:24px}
+.field{margin-bottom:14px}.field label{display:block;font-size:13px;color:#aaa;margin-bottom:4px}
+.field input{width:100%;padding:10px 12px;background:#0f0f17;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:14px}
+.field input:focus{border-color:#667eea}
+.field select{width:100%;padding:10px;background:#0f0f17;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:14px}
+.btn{width:100%;padding:14px;background:linear-gradient(135deg,#667eea,#764ba2);border:none;border-radius:10px;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.status{padding:12px;border-radius:8px;font-size:13px;margin:12px 0;display:none}
+.status.ok{display:block;background:#27ae6022;color:#27ae60}.status.err{display:block;background:#e74c3c22;color:#e74c3c}
+.status.info{display:block;background:#3498db22;color:#3498db}
+.note{font-size:12px;color:#666;margin-top:8px;line-height:1.6}
+</style>
+</head>
+<body>
+<div class="card">
+<h1><span class="icon">⌚</span> ESP32 烧录向导</h1>
+<p class="subtitle">配置 WiFi 和服务器地址，烧录到手表固件</p>
+
+<div id="status" class="status"></div>
+<div class="field">
+  <label>串口设备</label>
+  <select id="port"><option value="">点击检测...</option></select>
+  <button class="btn" style="margin-top:8px" onclick="detectPort()">检测串口</button>
+</div>
+<div class="field">
+  <label>WiFi SSID</label>
+  <input type="text" id="ssid" placeholder="你的WiFi名">
+</div>
+<div class="field">
+  <label>WiFi 密码</label>
+  <input type="password" id="password" placeholder="WiFi密码">
+</div>
+<div class="field">
+  <label>服务器 IP（Charlie 运行的 Mac）</label>
+  <input type="text" id="server_ip" placeholder="如 192.168.1.12">
+</div>
+<button class="btn" id="flashBtn" onclick="flash()">开始烧录</button>
+<p class="note">
+  烧录需要 sudo 权限访问串口。如果失败，请手动运行：<br>
+  <code>sudo python3 -m esptool --chip esp32s3 -p /dev/cu.usbmodem101 write_flash 0x0 patched.bin</code>
+</p>
+<div class="link-row" style="text-align:center;margin-top:16px"><a href="/" style="color:#667eea;text-decoration:none;font-size:13px">← 返回</a></div>
+</div>
+<script>
+const st=document.getElementById('status');
+async function detectPort(){
+  st.className='status info';st.textContent='检测中...';
+  try{
+    const r=await fetch('/api/esp32/detect-port');const d=await r.json();
+    const sel=document.getElementById('port');sel.innerHTML='';
+    if(d.ports&&d.ports.length){d.ports.forEach(p=>{const o=document.createElement('option');o.value=p.device;o.textContent=p.device+' ('+(p.board||'未知')+')';sel.appendChild(o)})}
+    st.className='status ok';st.textContent='检测到 '+d.ports.length+' 个串口';
+  }catch(e){st.className='status err';st.textContent='检测失败: '+e}
+}
+async function flash(){
+  const btn=document.getElementById('flashBtn');btn.disabled=true;btn.textContent='烧录中...';
+  st.className='status info';st.textContent='烧录中（需 30-60 秒）...';
+  const data={port:document.getElementById('port').value,ssid:document.getElementById('ssid').value,password:document.getElementById('password').value,server_ip:document.getElementById('server_ip').value};
+  try{
+    const r=await fetch('/api/esp32/flash',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const d=await r.json();
+    if(d.started){pollStatus()}else{st.className='status err';st.textContent='启动失败: '+d.message;btn.disabled=false;btn.textContent='开始烧录'}
+  }catch(e){st.className='status err';st.textContent='错误: '+e;btn.disabled=false;btn.textContent='开始烧录'}
+}
+async function pollStatus(){
+  const btn=document.getElementById('flashBtn');
+  const poll=async()=>{
+    try{
+      const r=await fetch('/api/esp32/flash-status');const d=await r.json();
+      if(d.done){
+        if(d.error){st.className='status err';st.textContent='❌ 烧录失败: '+d.error}
+        else{st.className='status ok';st.textContent='✅ 烧录完成！'+(d.connectivity?' 手表可连接。':'')}
+        btn.disabled=false;btn.textContent='开始烧录';
+      }else{st.textContent='烧录中... '+(d.progress||'');setTimeout(poll,2000)}
+    }catch(e){setTimeout(poll,2000)}
+  };
+  poll();
+}
+detectPort();
+</script>
+</body>
+</html>

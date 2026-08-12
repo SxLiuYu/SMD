@@ -1,0 +1,26 @@
+{
+  "xiaohongshu_com": [
+    "a1=",
+    "ets=",
+    "webId=",
+    "abRequestId=",
+    "loadts=",
+    "xsecappid=",
+    "gid=",
+    "id_token=",
+    "web_session=",
+    "x-rednote-datactry=",
+    "x-rednote-holderctry=",
+    "sec_poison_id=",
+    "websectiga="
+  ],
+  "douyin_com": [
+    "__tea_cache_tokens_1243=",
+    "bd_ticket_guard_client_data=",
+    "bd_ticket_guard_client_web_domain=",
+    "gfkadpd=",
+    "passport_csrf_token=",
+    "passport_csrf_token_default=",
+    "ttwid="
+  ]
+}

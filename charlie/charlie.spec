@@ -1,0 +1,193 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""
+Charlie 语音助手 — PyInstaller spec 文件
+
+构建命令:
+    # macOS (当前机器)
+    pyinstaller charlie.spec
+
+    # Windows (需在 Windows 机器上运行)
+    pyinstaller charlie.spec
+
+输出:
+    dist/charlie/            # 目录模式 (启动快, 体积小)
+    dist/charlie/charlie     # 可执行文件 (macOS)
+    dist/charlie/charlie.exe # 可执行文件 (Windows)
+"""
+
+import os
+import sys
+import platform
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+
+block_cipher = None
+
+# 收集所有隐式依赖的 Python 包
+hidden_imports = [
+    # MCP 子进程模块 — 注意: 源码文件名带连字符(magic-info.py), Python 无法直接 import,
+    # 运行时用 importlib.util.spec_from_file_location 按路径加载, 这里只放能直接 import 的
+    'baize_skills_mcp', 'mcp_ir_control',
+    'mcp_common', 'app.audio', 'app.brain_health', 'app.state',
+    'app.reminders', 'app.config', 'app.env_catalog', 'app.preflight',
+    'app.cert', 'app.mcp_gate', 'app.nvs_patch', 'utils',
+    # qwen_agent 隐式依赖
+    'qwen_agent', 'qwen_agent.agents', 'qwen_agent.tools',
+    'qwen_agent.tools.mcp_manager',
+    # mcp SDK
+    'mcp', 'mcp.server.fastmcp', 'mcp.client.stdio',
+    'mcp.client.sse', 'mcp.client.streamable_http',
+    'flask', 'soundfile',
+    # ASR/TTS
+    'aip',  # 百度SDK
+    'requests', 'urllib3',
+    # 音频处理
+    'pydub', 'audioop',
+    # Web框架
+    'uvicorn', 'fastapi', 'starlette', 'sse_starlette',
+    'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto',
+    'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto',
+    'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto',
+    'uvicorn.lifespan', 'uvicorn.lifespan.on',
+    # 其他
+    'psutil', 'dotenv', 'tiktoken', 'jieba', 'pytz',
+    'numpy',
+]
+
+# 收集数据文件 (前端HTML, 模板, 配置)
+datas = [
+    ('web', 'web'),                    # 前端静态文件 (voice/setup/welcome/esp32_setup)
+    ('app', 'app'),                    # app 模块数据
+    ('scripts', 'scripts'),            # gen-cert.sh, download-models.sh
+    ('.env.example', '.'),             # 配置模板
+    # MCP 源码文件 (文件名带连字符, 无法作为模块 import, 需作为数据文件打包, 运行时按路径加载)
+    ('magic-info.py', '.'),
+    ('magic-music.py', '.'),
+    ('magic-reminder.py', '.'),
+    ('magic-notes.py', '.'),
+    ('magic-system.py', '.'),
+    ('magic-life.py', '.'),
+    ('magic-scenes.py', '.'),
+    ('magic-evolution.py', '.'),
+    ('magic-summary.py', '.'),
+    ('magic-wardrobe.py', '.'),
+    ('magic-browser.py', '.'),
+    ('magic-apps.py', '.'),
+    ('magic-feishu.py', '.'),
+    ('magic-douyin.py', '.'),
+    ('magic-taobao.py', '.'),
+    ('magic-recipe.py', '.'),
+    ('baize_skills_mcp.py', '.'),
+    ('mcp_ir_control.py', '.'),
+]
+
+# 收集隐式依赖的包数据
+for pkg in ['qwen_agent', 'mcp', 'fastapi', 'starlette', 'uvicorn', 'sse_starlette']:
+    pkg_data = collect_data_files(pkg)
+    datas.extend(pkg_data)
+    hidden_imports.extend(collect_submodules(pkg))
+
+# ffmpeg 二进制文件 (从系统中查找)
+def _find_ffmpeg():
+    """查找系统 ffmpeg 路径"""
+    import shutil
+    path = shutil.which('ffmpeg')
+    if path:
+        return path
+    # macOS 常见路径 (homebrew Intel 和 M系列, 以及系统安装)
+    for p in ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg',
+              '/usr/bin/ffmpeg', '/opt/local/bin/ffmpeg']:
+        if os.path.isfile(p):
+            return p
+    # Windows 常见路径
+    if platform.system() == 'Windows':
+        for p in [r'C:\ffmpeg\bin\ffmpeg.exe', r'C:\Program Files\ffmpeg\bin\ffmpeg.exe']:
+            if os.path.isfile(p):
+                return p
+    return None
+
+def _find_ncm():
+    """查找系统的 ncm-cli 路径"""
+    import shutil
+    path = shutil.which('ncm')
+    if path:
+        return path
+    # 常见路径
+    for p in [os.path.expanduser('~/.local/bin/ncm'), '/usr/local/bin/ncm']:
+        if os.path.isfile(p):
+            return p
+    return None
+
+ffmpeg_path = _find_ffmpeg()
+if ffmpeg_path:
+    datas.append((ffmpeg_path, 'bin'))
+    print(f"[spec] 找到 ffmpeg: {ffmpeg_path}")
+else:
+    print("[spec] ⚠️ 未找到 ffmpeg，音频转码将不可用！")
+    print("[spec]   macOS: brew install ffmpeg")
+    print("[spec]   Windows: choco install ffmpeg 或手动下载")
+
+ncm_path = _find_ncm()
+if ncm_path:
+    datas.append((ncm_path, 'bin'))
+    print(f"[spec] 找到 ncm: {ncm_path}")
+else:
+    print("[spec] ⚠️ 未找到 ncm-cli，音乐播放将不可用！")
+    print("[spec]   macOS: pip install ncm-cli")
+    print("[spec]   Windows: pip install ncm-cli")
+
+binaries = []
+if ffmpeg_path:
+    binaries.append((ffmpeg_path, 'bin'))
+if ncm_path:
+    binaries.append((ncm_path, 'bin'))
+
+a = Analysis(
+    ['charlie_main.py'],
+    pathex=['.'],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hidden_imports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        'tkinter', 'matplotlib', 'pandas',
+        'scipy', 'cv2', 'torch', 'tensorflow',
+        'tests', 'pytest', 'unittest', 'IPython',
+        'jupyter', 'notebook', 'ipykernel',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name='charlie',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    console=True,  # 保留控制台窗口 (显示启动日志)
+    disable_windowed_traceback=False,
+    target_architecture=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name='charlie',
+)

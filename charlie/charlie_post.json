@@ -1,0 +1,17 @@
+{
+  "date": "2026-08-05",
+  "title": "给AI语音助手Charlie做了一次全面升级，越来越像贾维斯了",
+  "tags": [
+    "AI语音助手",
+    "智能家居",
+    "贾维斯",
+    "Python",
+    "HomeAssistant",
+    "私有部署",
+    "自托管",
+    "AI",
+    "智能音箱",
+    "MacMini"
+  ],
+  "content": "今天给Charlie做了一整天的升级优化，分享一下成果。\n\n🧠 叙事性记忆系统\n以前Charlie只会记统计数据（\"查了9次天气\"），现在能记叙事性记忆了——\"用户上周说项目周五截止\"\"用户喜欢吃意大利菜\"。每次对话后自动提取关键事件，后续对话中检索相关记忆注入system prompt。\n\n⚡ 自主决策引擎\n不再只是\"用户说晚安→执行晚安场景\"，而是\"深夜+用户休息状态+空调还开着→Charlie自己判断该执行晚安场景了\"。6条决策规则，融合用户状态机+时间+记忆+Protocol，每2分钟评估一次。\n\n🎯 用户状态机\n5个状态：home_awake / home_resting / home_sleeping / away / working\n融合手机位置+屏幕活跃+语音活动+时间，自动推断用户当前在做什么。主动建议从\"时间触发\"升级为\"状态变化触发\"。\n\n🔄 Protocol 引擎\n用户可以对话教Charlie新场景：\"以后我说开工了就开空调放音乐\"——Charlie学会了，下次说\"开工了\"自动执行。内置4个场景（晚安/早安/电影/出门），可扩展。\n\n👤 人格注入\n从\"极简不寒暄禁止emoji\"的工具说明书，变成\"你不是仆人，你是搭档。直接、偶尔幽默、不废话\"的搭档人格。\n\n🎨 空间界面（Hallmark设计风格）\n按Hallmark反AI-slop设计原则重写了前端CSS：单色系、Inter字体、无渐变、无玻璃态、干净边框。新增深色/浅色主题切换。\n\n📊 进化数据闭环\nevolution_data.json的分析结果（偏好、高频话题、活跃时段）现在通过_build_user_profile()注入到每次对话的system prompt里。对话有连续感了。\n\n🔍 wigolo搜索集成\n集成了wigolo搜索引擎，优先使用，超时回退Bing。\n\n🔧 Bug修复 + 性能优化\n- 修复brain_thread UnboundLocalError（8次崩溃）\n- 修复_history_snapshot缺失（3个端点500错误）\n- 清理131MB僵尸MCP子进程\n- 日志从2.6MB截断到45KB\n- 清理4个死代码文件\n\n技术栈：Python + FastAPI + Qwen-Agent + 17个MCP工具 + 百度ASR/TTS + 火山引擎ARK\n部署：Mac Mini M4 + Docker + Cloudflare Tunnel\n\n#AI语音助手 #智能家居 #贾维斯 #Python #私有部署"
+}

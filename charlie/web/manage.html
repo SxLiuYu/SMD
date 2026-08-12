@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Charlie · 管理面板</title>
+<style>
+*{margin:0;box-sizing:border-box}
+body{font-family:Inter,-apple-system,sans-serif;background:#0f0c29;color:#e0e0e0;min-height:100vh;padding:20px;max-width:900px;margin:0 auto}
+h1{font-size:20px;font-weight:600;margin-bottom:4px}
+h2{font-size:14px;font-weight:600;margin-bottom:8px;color:#a0a0ff}
+.sub{color:#888;font-size:11px;margin-bottom:16px}
+.tabs{display:flex;gap:4px;margin:16px 0;flex-wrap:wrap}
+.tabs button{padding:6px 14px;border:1px solid #333;border-radius:6px;background:#1a1a2e;color:#888;font-size:11px;cursor:pointer;font-family:inherit}
+.tabs button.active{background:#2a2a4e;color:#e0e0ff;border-color:#555}
+.card{background:#1a1a2e;border:1px solid #2a2a3e;border-radius:8px;padding:14px;margin-bottom:12px}
+.card h3{font-size:12px;font-weight:600;color:#a0a0ff;margin-bottom:8px}
+.item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #222;font-size:12px}
+.item:last-child{border-bottom:none}
+.item .meta{color:#888;font-size:10px}
+.item .actions{display:flex;gap:4px}
+.item .actions button{padding:2px 8px;border:1px solid #444;border-radius:4px;background:transparent;color:#888;font-size:10px;cursor:pointer;font-family:inherit}
+.item .actions button:hover{background:#2a2a4e;color:#e0e0ff}
+.item .actions button.danger{color:#ff6666;border-color:#663333}
+.item .actions button.danger:hover{background:#331111}
+.stat{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;background:#2a2a3e;border-radius:6px;margin:4px;font-size:12px}
+.stat .val{font-weight:600;font-size:16px;color:#a0a0ff}
+.btn-row{display:flex;gap:8px;margin-top:8px}
+.btn-row button{padding:6px 14px;border:1px solid #444;border-radius:6px;background:#2a2a3e;color:#e0e0e0;font-size:11px;cursor:pointer;font-family:inherit}
+.btn-row button:hover{background:#3a3a5e}
+input,select{padding:6px 10px;border:1px solid #333;border-radius:6px;background:#1a1a2e;color:#e0e0e0;font-size:12px;font-family:inherit;width:100%}
+.status-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px}
+.status-dot.ok{background:#22c55e}
+.status-dot.warn{background:#f59e0b}
+.status-dot.err{background:#ef4444}
+</style>
+</head>
+<body>
+<h1>Charlie 管理面板</h1>
+<div class="sub">系统状态 · 记忆 · 决策 · 协议 · 进化</div>
+
+<div class="tabs" id="tabs">
+  <button class="active" onclick="showTab('status')">系统状态</button>
+  <button onclick="showTab('memories')">记忆</button>
+  <button onclick="showTab('decisions')">决策</button>
+  <button onclick="showTab('protocols')">协议</button>
+  <button onclick="showTab('evolution')">进化</button>
+  <button onclick="showTab('logs')">日志</button>
+  <button onclick="showTab('mcp')">MCP工具</button>
+  <button onclick="showTab('tts')">TTS音色</button>
+</div>
+
+<div id="tab-status"><div class="card"><h3>加载中...</h3></div></div>
+<div id="tab-memories" style="display:none"><div class="card"><h3>加载中...</h3></div></div>
+<div id="tab-decisions" style="display:none"><div class="card"><h3>加载中...</h3></div></div>
+<div id="tab-protocols" style="display:none"><div class="card"><h3>加载中...</h3></div></div>
+<div id="tab-evolution" style="display:none"><div class="card"><h3>加载中...</h3></div></div>
+<div id="tab-logs" style="display:none"><div class="card"><h3>加载中...</h3></div></div>
+<div id="tab-mcp" style="display:none"><div class="card"><h3>加载中...</h3></div></div>
+<div id="tab-tts" style="display:none"><div class="card"><h3>加载中...</h3></div></div>
+
+<script>
+const API = '';
+let currentTab = 'status';
+
+function showTab(name) {
+  currentTab = name;
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('[id^="tab-"]').forEach(d => d.style.display = 'none');
+  document.getElementById('tab-'+name).style.display = 'block';
+  document.querySelector(`#tabs button:has-text("${name}")`)?.classList?.add('active');
+  // force active on correct button
+  document.querySelectorAll('#tabs button').forEach(b => {
+    if (b.textContent.includes({status:'系统状态',memories:'记忆',decisions:'决策',protocols:'协议',evolution:'进化',logs:'日志',mcp:'MCP工具',tts:'TTS音色'}[name])) b.classList.add('active');
+  });
+  loadTab(name);
+}
+
+async function fetchJSON(url) {
+  const r = await fetch(API + url);
+  return r.json();
+}
+
+function loadTab(name) {
+  switch(name) {
+    case 'status': loadStatus(); break;
+    case 'memories': loadMemories(); break;
+    case 'decisions': loadDecisions(); break;
+    case 'protocols': loadProtocols(); break;
+    case 'evolution': loadEvolution(); break;
+    case 'logs': loadLogs(); break;
+    case 'mcp': loadMCP(); break;
+    case 'tts': loadTTS(); break;
+  }
+}
+
+// === Status ===
+async function loadStatus() {
+  const status = await fetchJSON('/api/status');
+  const wake = await fetchJSON('/api/wake/status').catch(() => ({}));
+  const user = await fetchJSON('/api/user/current').catch(() => ({}));
+  const html = `
+    <div class="card">
+      <h3>服务状态</h3>
+      <div class="stat"><span class="status-dot ${status.brain_ready?'ok':'err'}"></span>大脑: ${status.brain_ready?'就绪':'未就绪'}</div>
+      <div class="stat"><span class="val">${(status.cpu_percent||0).toFixed(1)}%</span>CPU</div>
+      <div class="stat"><span class="val">${(status.memory_percent||0).toFixed(1)}%</span>内存</div>
+      <div class="stat"><span class="val">${status.metrics?.total_requests||0}</span>请求</div>
+      <div class="stat"><span class="val">${status.metrics?.total_errors||0}</span>错误</div>
+      <div class="stat"><span class="val">${status.websocket_connections||0}</span>WebSocket</div>
+    </div>
+    <div class="card">
+      <h3>唤醒词</h3>
+      <div>运行: ${wake.running?'是':'否'} | 启用: ${wake.enabled?'是':'否'} | 模型加载: ${wake.model_loaded?'是':'否'}</div>
+      <div>唤醒词: ${(wake.wake_words||[]).join(', ')}</div>
+    </div>
+    <div class="card">
+      <h3>当前用户: ${user.user_id||'default'}</h3>
+      <div class="btn-row">
+        <button onclick="switchUser('default')">切换到 default</button>
+        <button onclick="switchUser(prompt('用户名:'))">切换用户...</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>提醒</h3>
+      <div>待处理: ${status.reminders_pending||0} | 失败: ${status.reminder_delivery?.failed||0}</div>
+    </div>
+  `;
+  document.getElementById('tab-status').innerHTML = html;
+}
+
+async function switchUser(uid) {
+  if (!uid) return;
+  await fetch(API + '/api/user/switch?user_id=' + uid, {method:'POST'});
+  loadStatus();
+}
+
+// === Memories ===
+async function loadMemories() {
+  try {
+    const r = await fetchJSON('/api/memory');
+    const mems = r.recent || [];
+    const html = `
+      <div class="card">
+        <h3>记忆 (${r.total||0} 条)</h3>
+        <div>标签: ${JSON.stringify(r.tags||{})}</div>
+      </div>
+      <div class="card">
+        <h3>最近记忆</h3>
+        ${mems.length ? mems.map(m => `
+          <div class="item">
+            <div><span style="color:#a0a0ff">${m.datetime||''}</span> ${m.summary||''}</div>
+            <div class="actions">
+              <button class="danger" onclick="forgetMemory('${(m.summary||'').slice(0,20)}')">删除</button>
+            </div>
+          </div>
+        `).join('') : '<div class="item">暂无记忆</div>'}
+      </div>
+      <div class="card">
+        <h3>搜索记忆</h3>
+        <input id="mem-search" placeholder="关键词..." onkeydown="if(event.key==='Enter')searchMemories()">
+        <div class="btn-row"><button onclick="searchMemories()">搜索</button></div>
+        <div id="mem-search-results"></div>
+      </div>
+    `;
+    document.getElementById('tab-memories').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tab-memories').innerHTML = '<div class="card"><h3>记忆系统未就绪</h3></div>';
+  }
+}
+
+async function searchMemories() {
+  const q = document.getElementById('mem-search').value;
+  if (!q) return;
+  const r = await fetchJSON('/api/memory?query=' + q);
+  const div = document.getElementById('mem-search-results');
+  div.innerHTML = (r.recent||[]).map(m => `<div class="item"><div>${m.summary}</div></div>`).join('') || '无结果';
+}
+
+async function forgetMemory(q) {
+  await fetch(API + '/api/memory?query=' + q, {method:'DELETE'});
+  loadMemories();
+}
+
+// === Decisions ===
+async function loadDecisions() {
+  try {
+    const r = await fetchJSON('/api/decisions');
+    const html = `
+      <div class="card">
+        <h3>决策规则</h3>
+        ${(r.rules||[]).map(rule => `
+          <div class="item">
+            <div><span style="color:#a0a0ff">P${rule.priority}</span> ${rule.id} ${rule.confirm?'[需确认]':''}</div>
+            <div class="meta">${rule.condition?.check_desc||''}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="card">
+        <h3>触发历史</h3>
+        ${(r.history||[]).map(h => `
+          <div class="item"><div>${h.rule_id}: ${h.trigger_time}</div></div>
+        `).join('') || '<div class="item">暂无触发记录</div>'}
+      </div>
+    `;
+    document.getElementById('tab-decisions').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tab-decisions').innerHTML = '<div class="card"><h3>决策系统未就绪</h3></div>';
+  }
+}
+
+// === Protocols ===
+async function loadProtocols() {
+  try {
+    const r = await fetchJSON('/api/protocols');
+    const protos = r.protocols || [];
+    const html = `
+      <div class="card">
+        <h3>场景协议 (${protos.length} 个)</h3>
+        ${protos.map(p => `
+          <div class="item">
+            <div><span style="color:#a0a0ff">${p.is_builtin?'[内置]':'[自定义]'}</span> ${p.name}</div>
+            <div class="meta">触发词: ${p.triggers} | ${p.step_count}步</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="card">
+        <h3>学习新场景</h3>
+        <input id="proto-name" placeholder="场景名称 (如: 开工了)">
+        <input id="proto-triggers" placeholder="触发词 (逗号分隔, 如: 开工了,开始工作)" style="margin-top:8px">
+        <input id="proto-steps" placeholder="步骤描述 (如: 打开空调, 等待5秒, 播放专注音乐)" style="margin-top:8px">
+        <div class="btn-row"><button onclick="learnProtocol()">学习场景</button></div>
+      </div>
+    `;
+    document.getElementById('tab-protocols').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tab-protocols').innerHTML = '<div class="card"><h3>协议系统未就绪</h3></div>';
+  }
+}
+
+async function learnProtocol() {
+  const name = document.getElementById('proto-name').value;
+  const triggers = document.getElementById('proto-triggers').value;
+  const steps = document.getElementById('proto-steps').value;
+  if (!name || !triggers || !steps) return alert('请填写所有字段');
+  await fetch(API + '/api/protocols/learn', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, trigger_words: triggers, steps_description: steps})
+  });
+  loadProtocols();
+}
+
+// === Evolution ===
+async function loadEvolution() {
+  try {
+    const r = await fetchJSON('/api/evolution');
+    const html = `
+      <div class="card">
+        <h3>进化数据</h3>
+        <div class="stat"><span class="val">${r.total_conversations||0}</span>对话</div>
+        <div class="stat"><span class="val">${r.response_style||'默认'}</span>回复风格</div>
+        <div class="stat"><span class="val">${r.topic_count||0}</span>话题</div>
+      </div>
+      <div class="card">
+        <h3>用户偏好</h3>
+        ${Object.entries(r.preferences||{}).map(([k,v]) => `
+          <div class="item"><div>${k}</div><div class="meta">${v}</div></div>
+        `).join('') || '<div class="item">暂无偏好数据</div>'}
+      </div>
+      <div class="card">
+        <h3>活跃时段</h3>
+        ${(r.active_hours||[]).join(', ') || '暂无数据'}
+      </div>
+      <div class="btn-row">
+        <button onclick="triggerEvolution()">触发学习</button>
+      </div>
+    `;
+    document.getElementById('tab-evolution').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tab-evolution').innerHTML = '<div class="card"><h3>进化系统未就绪</h3></div>';
+  }
+}
+
+async function triggerEvolution() {
+  await fetch(API + '/api/evolution/learn', {method:'POST'});
+  loadEvolution();
+}
+
+// === Logs ===
+async function loadLogs() {
+  const lines = document.getElementById('log-lines')?.value || 100;
+  const filter = document.getElementById('log-filter')?.value || '';
+  try {
+    const r = await fetchJSON(`/api/logs?lines=${lines}&filter=${encodeURIComponent(filter)}`);
+    const html = `
+      <div class="card">
+        <h3>日志查看器</h3>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <input id="log-lines" type="number" value="100" min="10" max="1000" style="width:80px" placeholder="行数">
+          <input id="log-filter" placeholder="关键词过滤..." value="${filter}" style="flex:1">
+          <button onclick="loadLogs()">刷新</button>
+        </div>
+        <div style="font-size:10px;color:#888;margin-bottom:4px">${r.file||''} | 共 ${r.total} 行</div>
+        <pre style="font-size:10px;max-height:400px;overflow-y:auto;background:#111;padding:8px;border-radius:4px;line-height:1.4;white-space:pre-wrap;word-break:break-all">${(r.lines||[]).map(l => `<span style="color:#aaa">${l.replace(/</g,'&lt;')}</span>`).join('')}</pre>
+      </div>
+    `;
+    document.getElementById('tab-logs').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tab-logs').innerHTML = '<div class="card"><h3>日志加载失败</h3></div>';
+  }
+}
+
+// === MCP Tools ===
+async function loadMCP() {
+  try {
+    const r = await fetchJSON('/api/mcp/servers');
+    const html = `
+      <div class="card">
+        <h3>MCP 工具 (${r.servers.length} 个)</h3>
+        ${r.servers.map(s => `
+          <div class="item">
+            <div>
+              <span class="status-dot ${s.enabled?'ok':'err'}"></span>
+              <span style="color:#a0a0ff">${s.name}</span>
+              <span class="meta">${s.id}</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="meta">${s.cached?'已缓存':'未加载'}</span>
+              <button class="${s.enabled?'danger':''}" onclick="toggleMCP('${s.id}', ${!s.enabled})" style="font-size:10px;padding:2px 8px">
+                ${s.enabled?'禁用':'启用'}
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    document.getElementById('tab-mcp').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tab-mcp').innerHTML = '<div class="card"><h3>MCP 系统未就绪</h3></div>';
+  }
+}
+
+async function toggleMCP(serverId, enabled) {
+  await fetch(API + '/api/mcp/toggle', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({server_id: serverId, enabled})
+  });
+  loadMCP();
+}
+
+// === TTS Voices ===
+async function loadTTS() {
+  try {
+    const r = await fetchJSON('/api/tts/voices');
+    const html = `
+      <div class="card">
+        <h3>TTS 音色切换</h3>
+        <div style="margin-bottom:8px;font-size:12px">当前音色: <strong>${r.current}</strong></div>
+        ${r.voices.map(v => `
+          <div class="item" style="cursor:pointer" onclick="setTTSVoice('${v.id}')">
+            <div>
+              <span class="status-dot ${v.current?'ok':'err'}"></span>
+              ${v.name}
+            </div>
+            <div>
+              ${v.current ? '<span style="color:#22c55e;font-size:10px">✓ 当前</span>' : '<button style="font-size:10px;padding:2px 8px">使用</button>'}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    document.getElementById('tab-tts').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tab-tts').innerHTML = '<div class="card"><h3>TTS 系统未就绪</h3></div>';
+  }
+}
+
+async function setTTSVoice(voiceId) {
+  await fetch(API + '/api/tts/voice', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({voice_id: voiceId})
+  });
+  loadTTS();
+}
+
+// Start
+loadStatus();
+</script>
+</body>
+</html>
