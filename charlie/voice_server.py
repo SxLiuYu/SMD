@@ -783,12 +783,13 @@ async def _async_push_tts_to_xiaozhi(ws, text: str, mp3_data: bytes):
 
 
 def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
-    """推送 TTS 到所有连接的 ESP32 设备（从同步线程调用）"""
+    """推送 TTS 到所有连接的 ESP32 设备（从同步线程调用）
+    双管齐下：本进程直推 + 转发到HTTPS进程"""
     from app.state import snapshot_xiaozhi_clients
+    import base64 as _b64
+
+    # 1. 本进程直推（ESP32可能连HTTP 8000）
     clients = snapshot_xiaozhi_clients()
-    if not clients:
-        log.debug("[xiaozhi-push] 无 ESP32 连接，跳过")
-        return
     for client_id, info in clients.items():
         ws = info["ws"]
         loop = info["loop"]
@@ -797,9 +798,34 @@ def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
                 _async_push_tts_to_xiaozhi(ws, text, mp3_data),
                 loop,
             )
-            log.info(f"[xiaozhi-push] 调度推送到 {client_id}: {text[:30]}")
+            log.info(f"[xiaozhi-push] 直推 {client_id}: {text[:30]}")
         except Exception as e:
-            log.warning(f"[xiaozhi-push] 调度失败 {client_id}: {e}")
+            log.warning(f"[xiaozhi-push] 直推失败 {client_id}: {e}")
+
+    # 2. 同时转发到HTTPS进程（ESP32可能连HTTPS 8443）
+    try:
+        from app.config import https_port
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        _hport = https_port()
+        _lan_ip = _get_lan_ip() or "127.0.0.1"
+        mp3_b64 = _b64.b64encode(mp3_data).decode()
+        r = requests.post(
+            f"https://{_lan_ip}:{_hport}/api/internal/xiaozhi-push",
+            json={"text": text, "mp3": mp3_b64},
+            verify=False,
+            timeout=10,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("pushed", 0) > 0:
+                log.info(f"[xiaozhi-push] 转发HTTPS成功({data['pushed']}/{data['total']}): {text[:30]}")
+            else:
+                log.debug(f"[xiaozhi-push] HTTPS无ESP32连接(0/{data['total']})")
+        else:
+            log.warning(f"[xiaozhi-push] HTTPS转发HTTP {r.status_code}")
+    except Exception as e:
+        log.debug(f"[xiaozhi-push] HTTPS转发失败(ESP32可能连HTTP): {e}")
 
 
 def _reminder_scheduler():
@@ -3297,6 +3323,32 @@ async def toggle_mcp_server(server_id: str = "", enabled: bool = True):
 
 # Register xiaozhi-compatible WebSocket endpoint
 register_xiaozhi_routes(app)
+
+
+# ===== 内部推送API：跨进程转发 TTS 到 ESP32 =====
+# HTTP进程(8000)跑决策引擎，ESP32连HTTPS进程(8443)。
+# HTTP进程通过 POST /api/internal/xiaozhi-push 转发到HTTPS进程。
+@app.post("/api/internal/xiaozhi-push")
+async def _internal_xiaozhi_push(payload: dict):
+    """接收跨进程推送请求，转发TTS到所有已连接的ESP32"""
+    text = payload.get("text", "")
+    mp3_b64 = payload.get("mp3", "")
+    if not text or not mp3_b64:
+        return {"ok": False, "error": "missing text or mp3"}
+    import base64 as _b64
+    from app.state import snapshot_xiaozhi_clients
+    mp3_data = _b64.b64decode(mp3_b64)
+    clients = snapshot_xiaozhi_clients()
+    pushed = 0
+    for cid, info in clients.items():
+        ws = info["ws"]
+        loop = info["loop"]
+        try:
+            await _async_push_tts_to_xiaozhi(ws, text, mp3_data)
+            pushed += 1
+        except Exception as e:
+            log.warning(f"[xiaozhi-push] 内部转发失败 {cid}: {e}")
+    return {"ok": True, "pushed": pushed, "total": len(clients)}
 
 
 if __name__ == "__main__":
