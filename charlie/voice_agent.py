@@ -6,6 +6,10 @@ Charlie - 语音Agent核心
 """
 import os, sys, json, copy, base64, requests, datetime, time, logging, asyncio, re, random, tempfile, threading
 try:
+    from openai import RateLimitError as _RateLimitError
+except ImportError:  # openai 未安装时降级，退回字符串匹配
+    _RateLimitError = None
+try:
     import fcntl
 except ImportError:  # Windows 无 fcntl
     import fcntl_compat as fcntl
@@ -1096,9 +1100,14 @@ def _brain_llm(text: str, session_id: str = "default") -> str:
             break  # 成功，跳出轮换循环
         except Exception as e:
             err = str(e)
-            is_429 = '429' in err or 'Too Many' in err or '1305' in err
+            # GLM 429 检测：优先用类型判断（覆盖中英文错误消息），字符串兜底
+            is_429 = (_RateLimitError is not None and isinstance(e, _RateLimitError)) or \
+                     '429' in err or 'Too Many' in err or '1305' in err or \
+                     'rate' in err.lower() or '频率' in err
             if is_429 and _attempt < _glm_tries - 1:
                 # 轮换 GLM 模型 + 清缓存，下一轮 _get_brain 会用新模型重建
+                # 短暂休眠让限流窗口恢复，避免连续请求打满
+                time.sleep(1)
                 _new_model = _llm_cfg.rotate_glm_model()
                 log.warning(f"[brain] GLM 429 限流，轮换到 {_new_model} 重试（第{_attempt+2}个模型）")
                 with _brain_lock:

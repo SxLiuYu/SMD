@@ -19,6 +19,7 @@ REMINDERS_LOCK_FILE = REMINDERS_FILE + ".lock"
 SCHEDULER_LOCK_FILE = REMINDERS_FILE + ".scheduler.lock"
 SUGGESTIONS_STATE_FILE = os.path.join(DATA_DIR, "suggestions_state.json")
 PROACTIVE_LOCK_FILE = SUGGESTIONS_STATE_FILE + ".runner.lock"
+DECISION_LOCK_FILE = os.path.join(DATA_DIR, "decision_engine.runner.lock")
 DELIVERY_RETRY_DELAYS = [60, 180, 600]
 DELIVERY_CLAIM_TIMEOUT = 900  # 秒；播报线程崩溃后允许重新申领
 
@@ -66,6 +67,11 @@ def acquire_scheduler_lock():
 def acquire_proactive_lock():
     """非阻塞获取机器级主动建议运行锁；失败返回 None。"""
     return _acquire_file_lock(PROACTIVE_LOCK_FILE, "[suggest]")
+
+
+def acquire_decision_lock():
+    """非阻塞获取机器级决策引擎运行锁；失败返回 None。"""
+    return _acquire_file_lock(DECISION_LOCK_FILE, "[decision]")
 
 
 def _lock_status(lock_path: str) -> dict:
@@ -225,10 +231,42 @@ def append_reminder(text: str, time_str: str = "", due: str | None = None, repea
     """在排他锁内完成新增提醒的读改写，返回写入后的提醒副本。
 
     repeat: ""=一次性, "daily"=每天, "weekly"=每周, "weekdays"=工作日
+
+    去重：已存在相同 text + repeat + due(±60s) 的未完成提醒时，复用已有项，
+    防止晚安场景重复触发导致同内容多份提醒堆积。
     """
     now = dt.datetime.now()
     with _locked_reminders():
         reminders = _read_locked_reminders()
+
+        # 去重检查：同 text + repeat + due(±60s) 且未完成
+        norm_due = due or ""
+        if norm_due:
+            try:
+                due_dt = dt.datetime.fromisoformat(norm_due)
+            except Exception:
+                due_dt = None
+        else:
+            due_dt = None
+        for existing in reminders:
+            if existing.get("done"):
+                continue
+            if existing.get("text", "").strip() != text.strip():
+                continue
+            if existing.get("repeat", "") != repeat:
+                continue
+            ex_due = existing.get("due", "")
+            if due_dt and ex_due:
+                try:
+                    if abs((dt.datetime.fromisoformat(ex_due) - due_dt).total_seconds()) <= 60:
+                        log.info(f"[reminders] 跳过重复提醒: {text} (due={norm_due})")
+                        return copy.deepcopy(existing)
+                except Exception:
+                    pass
+            elif not norm_due and not ex_due:
+                log.info(f"[reminders] 跳过重复提醒: {text}")
+                return copy.deepcopy(existing)
+
         next_id = int(now.timestamp())
         for reminder in reminders:
             try:

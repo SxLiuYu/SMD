@@ -322,10 +322,17 @@ def _deadline_check() -> str | None:
             spec.loader.exec_module(mod)
             memories = mod.get_relevant_memories("截止", limit=3)
             for m in memories:
-                if "deadline" in m.get("tags", []) or "截止" in m.get("summary", ""):
-                    return m.get("summary", "")
-    except Exception:
-        pass
+                summary = m.get("summary", "")
+                # 过滤纯数字/过短内容，避免推"提醒：12，记得检查进度"
+                clean = summary.strip()
+                if len(clean) < 6:
+                    continue
+                if clean.isdigit():
+                    continue
+                if "deadline" in m.get("tags", []) or "截止" in clean:
+                    return clean
+    except Exception as e:
+        log.debug(f"[decision] deadline_check 异常: {e}")
     return None
 
 

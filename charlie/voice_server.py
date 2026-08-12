@@ -101,6 +101,7 @@ from app.reminders import (
     REMINDERS_FILE, _load_reminders, acquire_scheduler_lock, append_reminder, claim_due_reminders,
     complete_reminder, complete_reminder_delivery, release_failed_reminder,
     SUGGESTIONS_STATE_FILE, PROACTIVE_LOCK_FILE, acquire_proactive_lock,
+    DECISION_LOCK_FILE, acquire_decision_lock,
 )
 from app.routes.system import system_router
 from tuya_proxy import router as tuya_router
@@ -1136,9 +1137,16 @@ def _start_decision_engine():
     def _decision_loop():
         import time
         time.sleep(10)  # 启动后等10秒, 让其他系统就绪
-        log.info("[decision] 自主决策引擎已启动")
+        log.info("[decision] 自主决策引擎已启动，正在竞争机器级运行锁")
+        _decision_lock_handle = None
         while True:
             try:
+                if _decision_lock_handle is None:
+                    _decision_lock_handle = acquire_decision_lock()
+                    if _decision_lock_handle is None:
+                        time.sleep(60)
+                        continue
+                    log.info("[decision] 已获取机器级运行锁，开始评估决策")
                 # 获取用户状态
                 from voice_agent import get_user_state
                 user_state = get_user_state()
