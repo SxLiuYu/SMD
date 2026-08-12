@@ -345,10 +345,23 @@ def evaluate(user_state: dict, protocol_executor=None) -> list:
     hour = datetime.datetime.now().hour
     history = _load_decision_history()
 
+    # 假日检查：公共假日跳过工作相关规则（Nager.Date 免费API，无需Key）
+    _holiday_rules_skip = {"morning_wakeup", "leaving_reminder", "lunch_reminder", "meeting_reminder"}
+    try:
+        from app.holiday import is_holiday
+        _is_holiday = is_holiday()
+        if _is_holiday:
+            log.info("[decision] 今天是公共假日，跳过工作相关规则")
+    except Exception:
+        _is_holiday = False
+
     for rule in _DECISION_RULES:
         cond = rule["condition"]
         # 0. 反馈检查: 跳过负面反馈过多的规则
         if _should_skip_rule(rule["id"]):
+            continue
+        # 0.5 假日跳过工作相关规则
+        if _is_holiday and rule["id"] in _holiday_rules_skip:
             continue
         # 1. 状态匹配
         if state not in cond["states"]:

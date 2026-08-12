@@ -117,6 +117,30 @@ def get_news(topic: str = "科技", count: int = 5) -> str:
     例: get_news("科技") → 获取最新科技新闻
         get_news("财经", 3) → 获取3条财经新闻
     """
+    # 优先 OkSurf 免费 API（无需 Key），降级 Bing 爬取
+    oksurf_map = {"科技": "Technology", "财经": "Business", "商业": "Business",
+                  "体育": "Sports", "健康": "Health", "科学": "Science",
+                  "国际": "World", "世界": "World", "娱乐": "Entertainment"}
+    category = oksurf_map.get(topic)
+    if category:
+        try:
+            r = requests.get("https://ok.surf/api/v1/cors/news-feed",
+                headers={"Accept": "application/json"}, timeout=10)
+            items = r.json().get(category, [])
+            if items:
+                results = []
+                for item in items[:count]:
+                    title = item.get("title", "")
+                    link = item.get("link", "")
+                    if title:
+                        results.append(f"• {title}\n  {link}")
+                if results:
+                    log.info(f"[info] OkSurf新闻成功: {topic} → {len(results)}条")
+                    return f"最新{topic}新闻（{len(results)}条）：\n" + "\n\n".join(results)
+        except Exception as e:
+            log.debug(f"[info] OkSurf新闻失败: {e}")
+
+    # 降级: Bing 爬取
     import sys, re, html as htmlmod
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -200,6 +224,38 @@ def calculate(expression: str) -> str:
             return f"{e} = {result}"
     return aliyun_chat([{"role":"system","content":"你是计算换算助手，直接给结果和一行过程"},
         {"role":"user","content":expression}], temperature=0)
+
+
+@mcp.tool()
+def get_holiday_info(date: str = "") -> str:
+    """查询公共假日。date=日期(YYYY-MM-DD)，留空查今天
+
+    例: get_holiday_info() → 今天是否放假、假日名称
+        get_holiday_info("2026-10-01") → 查国庆节
+    """
+    import datetime as _dt
+    from app.holiday import get_holidays, get_holiday_name, is_holiday
+    try:
+        if date:
+            d = _dt.date.fromisoformat(date)
+        else:
+            d = _dt.date.today()
+    except ValueError:
+        return f"日期格式错误，请用 YYYY-MM-DD 格式"
+
+    name = get_holiday_name(d)
+    if name:
+        return f"{d.isoformat()} 是公共假日：{name}"
+    if is_holiday(d):
+        return f"{d.isoformat()} 是公共假日"
+
+    # 列出最近的假日
+    holidays = get_holidays(d.year)
+    upcoming = [h for h in holidays if h.get("date", "") > d.isoformat()]
+    if upcoming:
+        next_h = upcoming[0]
+        return f"{d.isoformat()} 不是公共假日。最近的是 {next_h['date']} {next_h.get('localName', next_h.get('name', ''))}"
+    return f"{d.isoformat()} 不是公共假日"
 
 
 if __name__ == "__main__":
