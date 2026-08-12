@@ -296,12 +296,31 @@ _sse_clients_lock = threading.Lock()
 _xiaozhi_clients = {}       # {client_id: {"ws": ws, "loop": event_loop}}
 _xiaozhi_lock = threading.Lock()
 
+# 待推送队列：ESP32未连接时暂存，连接时flush
+_xiaozhi_pending: list[dict] = []  # [{"text": str, "mp3": bytes, "ts": float}]
+_PENDING_TTL = 120  # 2分钟内的待推项才补发
+
 
 def register_xiaozhi_client(client_id: str, ws, loop) -> None:
-    """注册 xiaozhi ESP32 WebSocket 连接"""
+    """注册 xiaozhi ESP32 WebSocket 连接，并 flush 待推送队列"""
     with _xiaozhi_lock:
         _xiaozhi_clients[client_id] = {"ws": ws, "loop": loop}
-    log.info(f"[xiaozhi] 客户端已注册: {client_id} (总计: {len(_xiaozhi_clients)})")
+        pending = list(_xiaozhi_pending)
+        _xiaozhi_pending.clear()
+    log.info(f"[xiaozhi] 客户端已注册: {client_id} (总计: {len(_xiaozhi_clients)}, 待推送: {len(pending)})")
+    # 返回 pending 给调用方 flush（避免在锁内做异步操作）
+    return pending
+
+
+def enqueue_xiaozhi_pending(text: str, mp3: bytes) -> int:
+    """ESP32未连接时，将推送暂存队列。返回队列长度。"""
+    import time
+    with _xiaozhi_lock:
+        now = time.time()
+        # 清理过期项
+        _xiaozhi_pending[:] = [p for p in _xiaozhi_pending if now - p["ts"] < _PENDING_TTL]
+        _xiaozhi_pending.append({"text": text, "mp3": mp3, "ts": now})
+        return len(_xiaozhi_pending)
 
 
 def unregister_xiaozhi_client(client_id: str) -> None:

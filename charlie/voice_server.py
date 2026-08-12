@@ -709,12 +709,9 @@ def _put_sse_event_nowait(client_q: asyncio.Queue, event_frame: str) -> None:
         unregister_sse_client(client_q)
 
 def _play_reminder_audio(text: str, reminder_id: int | None = None):
-    """生成提醒语音并播放到默认音频输出(AirAirpods/扬声器) + ESP32 + 浏览器SSE
-    macOS原生用afplay; 同时推送到ESP32(xiaozhi WS)和浏览器(SSE)"""
+    """生成提醒语音并播放到 ESP32 + 浏览器SSE + macOS afplay(异步)
+    afplay 放到独立线程避免阻塞决策/调度线程"""
     import platform as _platform
-    tmp = None
-    delivery_failed = False
-    delivery_error = ""
     try:
         from voice_agent import tts_to_mp3
         log.info(f"[reminder] TTS生成: {text}")
@@ -722,18 +719,20 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
         if not audio or len(audio) < 100:
             raise RuntimeError("TTS返回空音频")
 
-        # 推送到 ESP32 (xiaozhi WebSocket)
+        # 推送到 ESP32 (xiaozhi WebSocket) — fire and forget
         _push_tts_to_xiaozhi(text, audio)
 
+        # macOS: afplay 放到独立线程，不阻塞决策循环
         if _platform.system() == "Darwin":
-            # macOS: 用 afplay 直接播放到系统音频设备
             from voice_agent import runtime_temp_audio_path
             tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False, dir=runtime_temp_audio_path())
             tmp.write(audio)
             tmp.close()
             log.info(f"[reminder] 播放提醒语音 {len(audio)}字节(MP3): {text}")
-            subprocess.run(["afplay", tmp.name], timeout=30, capture_output=True)
-            log.info("[reminder] 播放完成")
+            threading.Thread(
+                target=lambda: _afplay_and_cleanup(tmp.name, reminder_id),
+                daemon=True,
+            ).start()
         else:
             # Linux/容器: 通过 SSE 推送音频给所有连接的浏览器客户端
             import base64 as _b64
@@ -741,21 +740,28 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
             _push_notification_to_sse(_sse_event({"type": "audio", "audio": audio_b64, "source": "reminder"}))
             log.info(f"[reminder] 通过SSE推送提醒语音 {len(audio)}字节: {text}")
 
+        # 提醒投递标记在 TTS 生成成功后立即完成（不等 afplay 结束）
         if reminder_id is not None:
             complete_reminder_delivery(reminder_id)
     except Exception as e:
-        delivery_failed = True
-        delivery_error = str(e)
         log.error(f"[reminder] 播放失败: {e}")
         if reminder_id is not None:
-            release_failed_reminder(reminder_id, datetime.datetime.now(), delivery_error)
-    finally:
-        if tmp is not None:
-            try:
-                os.unlink(tmp.name)
-            except FileNotFoundError:
-                pass
+            release_failed_reminder(reminder_id, datetime.datetime.now(), str(e))
 _REMINDER_SCHEDULER_STOP = False
+
+
+def _afplay_and_cleanup(tmp_path: str, reminder_id: int | None = None):
+    """独立线程执行 afplay + 清理临时文件"""
+    try:
+        subprocess.run(["afplay", tmp_path], timeout=30, capture_output=True)
+        log.info("[reminder] 播放完成")
+    except Exception as e:
+        log.debug(f"[reminder] afplay失败: {e}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
 
 
 async def _async_push_tts_to_xiaozhi(ws, text: str, mp3_data: bytes):
@@ -763,19 +769,15 @@ async def _async_push_tts_to_xiaozhi(ws, text: str, mp3_data: bytes):
     import json as _json
     try:
         from app.xiaozhi_codec import mp3_to_opus_packets
-        # 1. MP3 → Opus packets (在线程池中执行避免阻塞事件循环)
         loop = asyncio.get_running_loop()
         packets = await loop.run_in_executor(None, mp3_to_opus_packets, mp3_data)
         if not packets:
             log.warning("[xiaozhi-push] Opus编码失败")
             return
-        # 2. 发送 TTS 控制消息
         await ws.send_text(_json.dumps({"type": "tts", "state": "start"}, ensure_ascii=False))
         await ws.send_text(_json.dumps({"type": "tts", "state": "sentence_start", "text": text}, ensure_ascii=False))
-        # 3. 发送 Opus 音频帧
         for pkt in packets:
             await ws.send_bytes(pkt)
-        # 4. 结束 TTS
         await ws.send_text(_json.dumps({"type": "tts", "state": "stop"}, ensure_ascii=False))
         log.info(f"[xiaozhi-push] 推送成功: {text[:30]} ({len(packets)}帧)")
     except Exception as e:
@@ -784,26 +786,33 @@ async def _async_push_tts_to_xiaozhi(ws, text: str, mp3_data: bytes):
 
 def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
     """推送 TTS 到所有连接的 ESP32 设备（从同步线程调用）
-    双管齐下：本进程直推 + 转发到HTTPS进程"""
-    from app.state import snapshot_xiaozhi_clients
-    import base64 as _b64
+    本进程有连接则直推；无连接时入队待flush + 转发HTTPS进程"""
+    from app.state import snapshot_xiaozhi_clients, enqueue_xiaozhi_pending
 
-    # 1. 本进程直推（ESP32可能连HTTP 8000）
+    # 1. 本进程直推（ESP32 可能连 HTTP 8000）
     clients = snapshot_xiaozhi_clients()
+    pushed = 0
     for client_id, info in clients.items():
         ws = info["ws"]
         loop = info["loop"]
         try:
             asyncio.run_coroutine_threadsafe(
-                _async_push_tts_to_xiaozhi(ws, text, mp3_data),
-                loop,
-            )
-            log.info(f"[xiaozhi-push] 直推 {client_id}: {text[:30]}")
+                _async_push_tts_to_xiaozhi(ws, text, mp3_data), loop)
+            pushed += 1
         except Exception as e:
             log.warning(f"[xiaozhi-push] 直推失败 {client_id}: {e}")
 
-    # 2. 同时转发到HTTPS进程（ESP32可能连HTTPS 8443）
+    if pushed > 0:
+        log.info(f"[xiaozhi-push] 直推 {pushed} 个设备: {text[:30]}")
+        return
+
+    # 2. 本进程无连接 → 入队待 flush（ESP32 重连时补发）
+    qsize = enqueue_xiaozhi_pending(text, mp3_data)
+    log.info(f"[xiaozhi-push] ESP32未连接，入队({qsize}): {text[:30]}")
+
+    # 3. 同时转发到 HTTPS 进程（ESP32 可能连 8443）
     try:
+        import base64 as _b64
         from app.config import https_port
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -813,19 +822,13 @@ def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
         r = requests.post(
             f"https://{_lan_ip}:{_hport}/api/internal/xiaozhi-push",
             json={"text": text, "mp3": mp3_b64},
-            verify=False,
-            timeout=10,
-        )
+            verify=False, timeout=10)
         if r.status_code == 200:
             data = r.json()
             if data.get("pushed", 0) > 0:
-                log.info(f"[xiaozhi-push] 转发HTTPS成功({data['pushed']}/{data['total']}): {text[:30]}")
-            else:
-                log.debug(f"[xiaozhi-push] HTTPS无ESP32连接(0/{data['total']})")
-        else:
-            log.warning(f"[xiaozhi-push] HTTPS转发HTTP {r.status_code}")
+                log.info(f"[xiaozhi-push] HTTPS转发成功({data['pushed']}/{data['total']}): {text[:30]}")
     except Exception as e:
-        log.debug(f"[xiaozhi-push] HTTPS转发失败(ESP32可能连HTTP): {e}")
+        log.debug(f"[xiaozhi-push] HTTPS转发失败: {e}")
 
 
 def _reminder_scheduler():
