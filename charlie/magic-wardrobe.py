@@ -126,7 +126,17 @@ def get_weather(city: str) -> dict:
                         }
         except Exception as e:
             log.warning(f"[wardrobe] 高德天气失败: {e}")
-    # 降级 wttr.in
+    # 降级 Open-Meteo（免费无 Key），再降级 wttr.in
+    try:
+        from app.weather import _open_meteo_get
+        w = _open_meteo_get(city)
+        if w:
+            log.debug(f"[wardrobe] Open-Meteo降级成功: {city} {w.get('weather_text')} {w.get('current_temp', w.get('day_temp', 20))}度")
+            return {"city": city, "temp": w.get("current_temp", w.get("day_temp", 20)),
+                    "weather": w.get("weather_text", "晴"), "humidity": "50", "wind": ""}
+    except Exception as e:
+        log.debug(f"[wardrobe] Open-Meteo失败: {e}")
+    # 最终降级 wttr.in
     try:
         r = requests.get(f"https://wttr.in/{city}?format=j1", timeout=8, headers={"User-Agent": "Wardrobe/1.0"})
         d = r.json()

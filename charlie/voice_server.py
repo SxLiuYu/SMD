@@ -902,16 +902,30 @@ def _claim_suggest_state(key: str, value) -> bool:
 _load_suggest_state()
 
 def _get_weather():
-    """直接调高德天气API(不走MCP，避免asyncio问题)"""
+    """获取天气预报。AMAP 优先，未配置时降级 Open-Meteo（免费无 Key）。"""
+    # 1. AMAP（有 Key 时优先）
+    if AMAP_KEY and not AMAP_KEY.startswith("你的"):
+        try:
+            r = requests.get(f"https://restapi.amap.com/v3/weather/weatherInfo",
+                params={"city": "110000", "key": AMAP_KEY, "extensions": "all"}, timeout=10)
+            data = r.json()
+            if data.get("forecasts"):
+                casts = data["forecasts"][0].get("casts", [])
+                if casts:
+                    return casts
+        except Exception as e:
+            log.error(f"[suggest] AMAP天气失败: {e}")
+    # 2. Open-Meteo 兜底（无需 Key）
     try:
-        r = requests.get(f"https://restapi.amap.com/v3/weather/weatherInfo",
-            params={"city": "110000", "key": AMAP_KEY, "extensions": "all"}, timeout=10)
-        data = r.json()
-        if data.get("forecasts"):
-            casts = data["forecasts"][0].get("casts", [])
-            return casts
+        from app.weather import _open_meteo_get
+        w = _open_meteo_get("北京")
+        if w:
+            # 转成 AMAP 兼容的 casts 格式
+            return [{"date": datetime.datetime.now().strftime("%Y-%m-%d"),
+                     "dayweather": w["weather_text"], "nightweather": w["weather_text"],
+                     "daytemp": str(w["day_temp"]), "nighttemp": str(w["night_temp"])}]
     except Exception as e:
-        log.error(f"[suggest] 天气API失败: {e}")
+        log.error(f"[suggest] Open-Meteo天气失败: {e}")
     return []
 
 def _forecast_for_date(casts, target_date: str) -> dict:

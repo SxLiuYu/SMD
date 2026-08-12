@@ -25,6 +25,12 @@ def get_detailed_weather(city: str = "北京") -> str:
     例: get_detailed_weather() → 返回今天详细天气+穿衣建议
         get_detailed_weather("上海") → 返回上海天气
     """
+    # 优先 AMAP，未配置时自动降级 Open-Meteo（免费无 Key）
+    from app.weather import get_weather_text
+    AMAP = os.getenv("AMAP_KEY", os.getenv("AMAP_MAPS_API_KEY", ""))
+    if not AMAP or AMAP.startswith("你的"):
+        log.info(f"[info] AMAP 未配置，降级 Open-Meteo")
+        return get_weather_text(city)
     AMAP = os.getenv("AMAP_KEY", os.getenv("AMAP_MAPS_API_KEY", ""))
     city_map = {"北京": "110000", "上海": "310000", "广州": "440100", "深圳": "440300",
                 "杭州": "330100", "成都": "510100", "武汉": "420100", "南京": "320100",
