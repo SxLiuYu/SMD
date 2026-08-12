@@ -255,6 +255,12 @@ def _mark_triggered(rule_id: str, history: dict):
     _save_decision_history(history)
 
 
+def mark_triggered(rule_id: str) -> None:
+    """公开接口：标记规则已触发（写冷却历史）"""
+    history = _load_decision_history()
+    _mark_triggered(rule_id, history)
+
+
 def _calendar_check() -> str | None:
     """检查飞书日历中是否有即将开始的会议, 返回事件摘要或None"""
     try:

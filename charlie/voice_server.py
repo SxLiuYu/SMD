@@ -1150,14 +1150,21 @@ def _start_decision_engine():
                                 # 设置待确认状态: brain() 会检测用户回应
                                 _dec.set_pending_confirmation(rule["id"], msg)
                         else:
-                            # 自动执行: 加载Protocol执行器
+                            # 自动执行: 加载Protocol执行器或发送TTS消息
                             try:
-                                _scene_mod = load_magic_module("magic_scenes", "magic-scenes.py")
-                                if _scene_mod:
-                                    result = _dec.execute_decision(rule, _scene_mod.execute_protocol)
-                                    if result:
-                                        _add_notification(result[:200], "decision")
-                                        _play_reminder_audio(result[:200])
+                                _dec.mark_triggered(rule["id"])  # 标记冷却，避免重复推送
+                                if rule["action"]["type"] == "protocol":
+                                    _scene_mod = load_magic_module("magic_scenes", "magic-scenes.py")
+                                    if _scene_mod:
+                                        result = _dec.execute_decision(rule, _scene_mod.execute_protocol)
+                                        if result:
+                                            _add_notification(result[:200], "decision")
+                                            _play_reminder_audio(result[:200])
+                                elif rule["action"]["type"] == "tts":
+                                    msg = rule["action"].get("text", "")
+                                    if msg:
+                                        _add_notification(msg, "decision")
+                                        _play_reminder_audio(msg)
                             except Exception as e:
                                 log.warning(f"[decision] 执行失败: {e}")
             except Exception as e:
