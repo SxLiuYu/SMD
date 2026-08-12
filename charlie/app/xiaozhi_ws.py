@@ -32,7 +32,11 @@ from app.xiaozhi_codec import (
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-    import opuslib
+    try:
+        import opuslib
+    except ImportError:
+        opuslib = None
+        logging.getLogger(__name__).warning("opuslib not installed; xiaozhi Opus decode unavailable")
 
 log = logging.getLogger(__name__)
 

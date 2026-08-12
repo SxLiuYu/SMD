@@ -2,7 +2,11 @@
 
 REMINDERS_FILE 路径基于项目根(app的上级目录). 7天前已完成的提醒自动清理.
 """
-import os, json, fcntl, logging, copy, tempfile, datetime as dt
+import os, json, logging, copy, tempfile, datetime as dt
+try:
+    import fcntl
+except ImportError:  # Windows 无 fcntl
+    import fcntl_compat as fcntl
 from contextlib import contextmanager
 log = logging.getLogger("magic")
 

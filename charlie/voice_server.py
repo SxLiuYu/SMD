@@ -20,15 +20,20 @@ from collections.abc import Callable
 if not getattr(sys, 'frozen', False):
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
-    from dotenv import load_dotenv; load_dotenv()
-except ImportError:
-        log.debug("[voice_server] python-dotenv 未安装")
+    from dotenv import load_dotenv
+    # frozen 模式下 .env 与 exe 同目录(dist/charlie/.env)，cwd 可能不在那里，需显式指定
+    _dotenv_path = os.path.join(os.path.dirname(sys.executable), ".env") if getattr(sys, "frozen", False) else None
+    load_dotenv(_dotenv_path) if _dotenv_path else load_dotenv()
+except ImportError: pass
 from fastapi import FastAPI, UploadFile, File, Request, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, HTMLResponse, JSONResponse, StreamingResponse
 import uvicorn
 import requests
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows 无 fcntl
+    import fcntl_compat as fcntl
 from pydantic import BaseModel, Field, field_validator
 
 # ===== 结构化日志(JSON或文本格式, 通过LOG_FORMAT环境变量控制) =====
@@ -174,8 +179,9 @@ def _validate_env():
         log.warning(f"[env] 缺少{len(missing)}个必需密钥: {[e.name for e in missing]}")
     if env_catalog.demo_mode_active():
         log.warning("━━━ Demo 模式已启用 ━━━")
-        log.warning("未配置 ARK_KEY，大脑将使用 Ollama 本地模型（qwen3.5:2b）。")
-        log.warning("请确保: 1) ollama serve 已运行  2) 已 ollama pull qwen3.5:2b")
+        log.warning("未配置 ARK_KEY / GLM_KEY，大脑将使用 Ollama 本地模型（qwen3.5:2b）。")
+        log.warning("推荐：打开 http://localhost:%d/welcome 引导页，申请智谱 GLM 免费 Key（glm-4-flash 永久免费）" % http_port())
+        log.warning("或确保: 1) ollama serve 已运行  2) 已 ollama pull qwen3.5:2b")
         log.warning("完整配置请打开 http://localhost:%d/setup" % http_port())
     elif missing:
         log.warning(f"缺少 {len(missing)} 个必需密钥: {', '.join(e.name for e in missing)}")
@@ -2916,23 +2922,16 @@ async def post_setup(request: Request):
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "请求数据格式错误"}, status_code=400)
-    # 只允许写入白名单中的键
-    safe_data = {k: str(v).strip() for k, v in data.items() if k in _SETUP_WHITELIST}
-    # 宽松校验：必需项缺失时，要求前端显式接受 Demo 模式
-    required = _required_keys_runtime()
-    missing = [k for k in required if not safe_data.get(k)]
+    # 只允许写入白名单中的键（空值跳过，不覆盖已存）
+    safe_data = {k: str(v).strip() for k, v in data.items() if k in _SETUP_WHITELIST and str(v).strip()}
     demo_accept = str(data.get("demo_accept", "false")).lower() in ("1", "true", "yes", "on")
-    if missing and not demo_accept:
-        hint = "（或勾选「使用 Demo 模式（Ollama 本地）」跳过）"
-        return JSONResponse({
-            "ok": False,
-            "error": f"缺少必需配置: {', '.join(missing)} {hint}",
-            "missing": missing,
-        }, status_code=400)
     try:
         _write_env_file(_ENV_FILE, safe_data)
-        log.info(f"[setup] 配置已保存到 {_ENV_FILE} (demo_accept={demo_accept})")
-        return {"ok": True, "message": "配置已保存，需要重启 Charlie 生效"}
+        # 反馈 LLM 是否就绪（合并已存 .env 值），供前端引导判断
+        existing = _parse_env_file(_ENV_FILE)
+        llm_ready = bool(existing.get("ARK_KEY")) or bool(existing.get("GLM_KEY"))
+        log.info(f"[setup] 配置已保存到 {_ENV_FILE} (demo_accept={demo_accept}, llm_ready={llm_ready})")
+        return {"ok": True, "message": "配置已保存，需要重启 Charlie 生效", "llm_ready": llm_ready}
     except Exception as e:
         log.error(f"[setup] 保存失败: {e}")
         return JSONResponse({"ok": False, "error": f"保存失败: {e}"}, status_code=500)

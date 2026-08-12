@@ -52,3 +52,9 @@ Baize/.env
 # 营销文案（本地保留，不提交 Git 仓库）
 docs/social-media-帖子内容.md
 docs/social-media/
+# 构建产物 / 本地环境（不提交）
+charlie/dist/
+charlie/build/
+charlie/.env
+charlie/.baidu_token.json
+assistant-kid/

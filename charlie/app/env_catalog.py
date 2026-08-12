@@ -110,6 +110,19 @@ ENTRIES: list[EnvEntry] = [
              description="ARK API 基址（火山引擎北京区）"),
     EnvEntry("ARK_MODEL", default="ark-code-latest", group="core", tunable=True,
              description="大脑模型名"),
+    # 智谱 GLM 免费大脑 — glm-4-flash 永久免费，OpenAI 兼容，无需 ARK
+    EnvEntry("GLM_KEY", group="core", secret=True, demo_supported=True,
+             get_guide="https://open.bigmodel.cn/apikey/platform",
+             description="智谱 GLM 免费 Key。glm-4.7-flash 模型永久免费、不限量。不想配 ARK_KEY 时填这个即可"),
+    EnvEntry("GLM_BASE", default="https://open.bigmodel.cn/api/paas/v4",
+             group="core", tunable=True,
+             description="智谱 API 基址（OpenAI 兼容）"),
+    EnvEntry("GLM_MODEL", default="glm-4.7-flash",
+             group="core", tunable=True,
+             description="智谱模型名（glm-4.7-flash 永久免费）"),
+    EnvEntry("GLM_MODELS", default="glm-4.7-flash,glm-4-flash,glm-4.5-flash",
+             group="core", tunable=True,
+             description="GLM 429 限流 fallback 链（逗号分隔，按顺序轮换）"),
     EnvEntry("BAIDU_APP_ID", required=True, group="core", secret=True,
              get_guide="https://console.bce.baidu.com/ai/#/ai/speech/overview/index",
              description="百度智能云 App ID（ASR + TTS）"),
@@ -299,16 +312,16 @@ def missing_required() -> list[EnvEntry]:
 
 
 def llm_available() -> bool:
-    """是否有任何一种 LLM 可用：ARK 已配 或 Ollama Demo 模式可用
+    """是否有任何一种 LLM 可用：ARK 已配、智谱 GLM 免费 Key 已配、或 Ollama Demo 模式可用
 
-    Demo 模式不强制要求 Ollama 在线（启动后可后装），只要未配 ARK 就认为走 Demo。
+    Demo 模式不强制要求 Ollama 在线（启动后可后装），只要未配 ARK/GLM 就认为走 Demo。
     """
-    return is_configured("ARK_KEY")
+    return is_configured("ARK_KEY") or is_configured("GLM_KEY")
 
 
 def demo_mode_active() -> bool:
-    """当前是否处于 Demo 模式（未配 ARK_KEY）"""
-    return not is_configured("ARK_KEY")
+    """当前是否处于 Demo 模式（未配 ARK_KEY 且未配 GLM_KEY）"""
+    return not (is_configured("ARK_KEY") or is_configured("GLM_KEY"))
 
 
 def setup_whitelist_keys() -> list[str]:
@@ -408,4 +421,10 @@ def render_welcome_status() -> dict:
         "ollama_online": False,  # voice_server 层从 llm_config 取
         "missing_required": [e.name for e in missing_required()],
         "llm_available": llm_available(),
+        # 引导向导用：各模块是否已配（不暴露密钥值）
+        "baidu_configured": (is_configured("BAIDU_APP_ID")
+                             and is_configured("BAIDU_API_KEY")
+                             and is_configured("BAIDU_SECRET_KEY")),
+        "glm_configured": is_configured("GLM_KEY"),
+        "ark_configured": is_configured("ARK_KEY"),
     }

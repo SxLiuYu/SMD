@@ -32,6 +32,8 @@ h1 .icon{width:36px;height:36px;background:linear-gradient(135deg,#667eea,#764ba
 .badge.set{background:#3498db22;color:#3498db}
 .field input{width:100%;padding:9px 11px;background:#0f0f17;border:1px solid #333;border-radius:7px;color:#e0e0e0;font-size:14px;outline:none;transition:border .2s}
 .field input:focus{border-color:#667eea}
+.apply-btn{flex-shrink:0;padding:0 14px;background:#20202e;border:1px solid #667eea;border-radius:7px;color:#9ab0ff;font-size:12px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;text-decoration:none}
+.apply-btn:hover{background:#252540}
 .field .hint{font-size:11px;color:#666;margin-top:3px}
 .field .hint a{color:#667eea;text-decoration:none}
 .demo-check{margin:8px 0 16px;padding:10px 14px;background:#f39c1222;border:1px solid #f39c1244;border-radius:8px;font-size:13px;color:#f39c12;display:flex;align-items:center;gap:8px}
@@ -122,11 +124,15 @@ function fieldHtml(e){
   else if(e.demo_supported) badge = `<span class="badge demo">Demo可用</span>`;
   else badge = `<span class="badge optional">可选</span>`;
   if(e.configured) badge += ` <span class="badge set">已配置</span>`;
-  const hint = e.description ? `<div class="hint">${e.description}${e.get_guide ? ` · <a href="${e.get_guide}" target="_blank">获取</a>` : ''}</div>` : '';
+  const apply = e.get_guide ? `<a class="apply-btn" href="${e.get_guide}" target="_blank">申请入口 →</a>` : '';
+  const hint = e.description ? `<div class="hint">${e.description}</div>` : '';
   const ph = e.required ? '（必需）' : (e.default ? `默认: ${e.default}` : '');
   return `<div class="field">
     <label><span class="key">${e.name}</span>${badge}</label>
-    <input type="${type}" id="fld_${e.name}" data-key="${e.name}" value="${escapeAttr(val)}" placeholder="${escapeAttr(ph)}" autocomplete="off">
+    <div class="field-row" style="display:flex;gap:8px;align-items:stretch">
+      <input type="${type}" id="fld_${e.name}" data-key="${e.name}" value="${escapeAttr(val)}" placeholder="${escapeAttr(ph)}" autocomplete="off" style="flex:1;min-width:0">
+      ${apply}
+    </div>
     ${hint}
   </div>`;
 }

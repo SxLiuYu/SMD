@@ -4,7 +4,10 @@ import json
 import tempfile
 import threading
 import time
-import fcntl
+try:
+    import fcntl
+except ImportError:  # Windows 无 fcntl
+    import fcntl_compat as fcntl
 import logging
 from contextlib import contextmanager
 from typing import Optional

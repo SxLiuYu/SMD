@@ -2,7 +2,11 @@
 Charlie - 共享工具模块
 提取重复逻辑: 时间解析、临时文件清理、错误脱敏
 """
-import os, re, datetime, tempfile, glob, logging, fcntl
+import os, re, datetime, tempfile, glob, logging
+try:
+    import fcntl
+except ImportError:  # Windows 无 fcntl
+    import fcntl_compat as fcntl
 import json
 from contextlib import contextmanager
 

@@ -4,14 +4,21 @@ Charlie - 语音Agent核心
 连接韧性: Session复用 + 自动重试 + 异常降级
 对话记忆: 跨请求保留历史上下文，支持多轮连续对话，持久化到磁盘
 """
-import os, sys, json, copy, base64, requests, datetime, time, logging, asyncio, re, random, tempfile, threading, fcntl
+import os, sys, json, copy, base64, requests, datetime, time, logging, asyncio, re, random, tempfile, threading
+try:
+    import fcntl
+except ImportError:  # Windows 无 fcntl
+    import fcntl_compat as fcntl
 from typing import Optional, Generator, Tuple, List, Dict, Any, Callable
 from contextlib import contextmanager
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+if not getattr(sys, 'frozen', False):
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
-    from dotenv import load_dotenv; load_dotenv()
+    from dotenv import load_dotenv
+    _dotenv_path = os.path.join(os.path.dirname(sys.executable), ".env") if getattr(sys, "frozen", False) else None
+    load_dotenv(_dotenv_path) if _dotenv_path else load_dotenv()
 except ImportError:
-    log.debug("[voice_agent] python-dotenv 未安装，跳过 .env 加载")
+    pass
 
 log = logging.getLogger("magic")
 
@@ -29,6 +36,7 @@ from app.llm_config import (
     OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_OPENAI_BASE,
     demo_mode_active as _demo_mode_active_impl,
     ollama_online as _ollama_online_impl,
+    active_chat_endpoint,
 )
 
 
@@ -163,13 +171,16 @@ def _build_brain(mcp_set="all"):
 
     重构后（#2）：3 行 assembler，委托给 llm_config + mcp_registry。
     """
-    # 内存检查: 防止OOM崩溃
+    # 内存检查: 防止OOM崩溃（按可用字节判断，避免高占用基线机器误拦截）
     try:
         import psutil
         mem = psutil.virtual_memory()
-        if mem.percent > 90:
-            log.error(f"[brain] 内存不足({mem.percent}%)，拒绝构建大脑防OOM"); raise RuntimeError(f"内存不足({mem.percent}%), 拒绝构建大脑防OOM")
-        log.info(f"[brain] 内存检查通过: {mem.percent}% ({(mem.total-mem.available)//1073741824:.1f}GB可用)")
+        avail_gb = mem.available / 1073741824
+        # 可用 < 300MB 才拦截（Qwen-Agent + uvicorn 约需 200MB 工作集）
+        if avail_gb < 0.3:
+            log.error(f"[brain] 内存不足(可用 {avail_gb:.1f}GB / {mem.percent}%占用)，拒绝构建大脑防OOM")
+            raise RuntimeError(f"内存不足(可用 {avail_gb:.1f}GB / {mem.percent}%占用), 拒绝构建大脑防OOM")
+        log.info(f"[brain] 内存检查通过: {mem.percent}% ({avail_gb:.1f}GB可用)")
     except ImportError:
         pass
     from qwen_agent.agents import Assistant
@@ -357,13 +368,13 @@ def _classify_intent(text: str) -> str:
         f"用户输入: {text[:100]}\n"
         "工具: →")
     try:
-        r = _session.post(f"{ARK_BASE}/chat/completions",
-            json={"model": ARK_MODEL,
+        _ep_base, _ep_key, _ep_model = active_chat_endpoint()
+        r = _session.post(f"{_ep_base}/chat/completions",
+            json={"model": _ep_model,
                   "messages": [{"role": "user", "content": prompt}],
                   "stream": False,
-                  "max_tokens": 10, "temperature": 0,
-                  "extra_body": {"enable_thinking": False}},
-            headers={"Authorization": f"Bearer {ARK_KEY}"},
+                  "max_tokens": 10, "temperature": 0},
+            headers={"Authorization": f"Bearer {_ep_key}"},
             timeout=(3, 10))
         raw = r.json().get("choices", [{}])[0].get("message", {}).get("content", "").strip().lower()
         mcp = _normalize_intent(raw)
@@ -1058,34 +1069,54 @@ def _brain_llm(text: str, session_id: str = "default") -> str:
         return reply
 
     _ensure_event_loop()
-    try:
-        brain_instance = _get_brain(mcp_set)
-    except Exception as e:
-        _record_brain_failure(str(e)[:60])
-        return "大脑启动失败，请稍后重试。"
+    from app import llm_config as _llm_cfg
+    # GLM 429 限流 fallback：429 时轮换到下一个免费模型，清缓存重建大脑重试
+    _glm_tries = len(getattr(_llm_cfg, "GLM_MODELS", []) or [None]) if _llm_cfg.is_glm_configured() and not _llm_cfg.is_ark_configured() else 1
+    final = None
+    for _attempt in range(_glm_tries):
+        try:
+            brain_instance = _get_brain(mcp_set)
+        except Exception as e:
+            _record_brain_failure(str(e)[:60])
+            return "大脑启动失败，请稍后重试。"
 
-    hist = _get_history(session_id)
-    messages = [{'role': m['role'], 'content': m['content']} for m in hist] + [{'role': 'user', 'content': text}]
-    try:
-        final = None
-        for rsp in brain_instance.run(messages):
-            final = rsp
-            if isinstance(rsp, list):
-                for m in rsp:
-                    if isinstance(m, dict) and m.get('role') == 'function' and isinstance(m.get('content'), str) and m['content'].startswith('__MUSIC__'):
-                        break
-                else:
-                    continue
-                break
-        _record_brain_success()
-    except Exception as e:
-        _record_brain_failure(str(e)[:60])
-        ollama_reply = _ollama_fallback(text, messages)
-        if ollama_reply:
-            log.info(f"[brain] Finna失败, Ollama降级成功: {ollama_reply[:30]}")
-            _append_history(hist, text, ollama_reply)
-            _cache_set(text, ollama_reply)
-            return ollama_reply
+        hist = _get_history(session_id)
+        messages = [{'role': m['role'], 'content': m['content']} for m in hist] + [{'role': 'user', 'content': text}]
+        try:
+            for rsp in brain_instance.run(messages):
+                final = rsp
+                if isinstance(rsp, list):
+                    for m in rsp:
+                        if isinstance(m, dict) and m.get('role') == 'function' and isinstance(m.get('content'), str) and m['content'].startswith('__MUSIC__'):
+                            break
+                    else:
+                        continue
+                    break
+            _record_brain_success()
+            break  # 成功，跳出轮换循环
+        except Exception as e:
+            err = str(e)
+            is_429 = '429' in err or 'Too Many' in err or '1305' in err
+            if is_429 and _attempt < _glm_tries - 1:
+                # 轮换 GLM 模型 + 清缓存，下一轮 _get_brain 会用新模型重建
+                _new_model = _llm_cfg.rotate_glm_model()
+                log.warning(f"[brain] GLM 429 限流，轮换到 {_new_model} 重试（第{_attempt+2}个模型）")
+                with _brain_lock:
+                    for _k, _b in list(_brains.items()):
+                        _cleanup_brain_processes(_b)
+                    _brains.clear()
+                    _brain_failures = 0
+                continue
+            _record_brain_failure(err[:60])
+            ollama_reply = _ollama_fallback(text, messages)
+            if ollama_reply:
+                log.info(f"[brain] Finna失败, Ollama降级成功: {ollama_reply[:30]}")
+                _append_history(hist, text, ollama_reply)
+                _cache_set(text, ollama_reply)
+                return ollama_reply
+            return "抱歉，我现在有点忙不过来，请稍等一下再试。"
+    else:
+        # 所有模型轮换均失败
         return "抱歉，我现在有点忙不过来，请稍等一下再试。"
 
     reply = _extract_assistant_text(final) if final and isinstance(final, list) else "我没听明白"
