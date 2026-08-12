@@ -131,6 +131,9 @@ async def lifespan(app):
     else:
         global _main_loop
         _main_loop = asyncio.get_running_loop()
+        # 启动 MQTT xiaozhi 协议端（ESP32 常驻连接 + UDP 音频）
+        from app.mqtt_server import init_server as init_mqtt_server
+        init_mqtt_server(_main_loop)
         # 启动时清理临时文件 + 截断历史
         from utils import cleanup_temp_files, truncate_history_file
         from voice_agent import runtime_temp_audio_path
@@ -806,16 +809,19 @@ def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
         log.info(f"[xiaozhi-push] 直推 {pushed} 个设备: {text[:30]}")
         return
 
-    # 2. 本进程无连接 → 入队待 flush + MQTT 摇醒 + HTTPS 转发
+    # 2. 本进程无连接 → 尝试 MQTT 直推 + 入队 + HTTPS 转发
+    # 2a. MQTT 协议端（ESP32 常驻连接时直接推送，秒级响应）
+    try:
+        from app.mqtt_server import push_tts_to_mqtt
+        if push_tts_to_mqtt(text, mp3_data):
+            log.info(f"[xiaozhi-push] MQTT直推成功: {text[:30]}")
+            return
+    except Exception:
+        pass
+
+    # 2b. 入队待 flush（ESP32 下次唤醒时补发）
     qsize = enqueue_xiaozhi_pending(text, mp3_data)
     log.info(f"[xiaozhi-push] ESP32未连接，入队({qsize}): {text[:30]}")
-
-    # 2a. MQTT wake — 摇 ESP32 主动建 WS（秒级响应）
-    try:
-        from app.mqtt_push import publish_wake
-        publish_wake(reason="reminder")
-    except Exception:
-        pass  # MQTT 未配置时静默跳过
 
     # 3. 同时转发到 HTTPS 进程（ESP32 可能连 8443）
     try:
@@ -2157,7 +2163,9 @@ async def xiaozhi_ota(request: Request):
         host = _get_lan_ip() or "127.0.0.1"
     # 端口动态化：跟随 ASSISTANT_KID_HTTP_PORT（不再硬编码 :8000）
     ws_url = f"ws://{host}:{http_port()}/ws/xiaozhi"
-    return JSONResponse({
+
+    # 构建 OTA 响应
+    ota_response = {
         "websocket": {
             "url": ws_url,
             "version": 1,
@@ -2166,7 +2174,30 @@ async def xiaozhi_ota(request: Request):
             "timestamp": int(datetime.datetime.now().timestamp()),
             "timezone_offset": 480,
         }
-    })
+    }
+
+    # 如果配置了 MQTT broker，返回 mqtt 段激活固件 MqttProtocol（常驻连接 + UDP 音频）
+    # 固件逻辑: OTA 含 mqtt 段 → 用 MqttProtocol 替代 WebsocketProtocol
+    mqtt_broker = os.getenv("MQTT_BROKER", "")
+    if mqtt_broker:
+        mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
+        mqtt_user = os.getenv("MQTT_USER", "")
+        mqtt_pass = os.getenv("MQTT_PASSWORD", "")
+        device_id = os.getenv("MQTT_DEVICE_ID", "esp32-default")
+        ota_response["mqtt"] = {
+            "endpoint": f"{mqtt_broker}:{mqtt_port}",
+            "client_id": f"charlie-{device_id}",
+            "publish_topic": f"charlie/esp32/{device_id}/up",
+            "subscribe_topic": f"charlie/esp32/{device_id}/down",
+            "keepalive": 60,
+        }
+        if mqtt_user:
+            ota_response["mqtt"]["username"] = mqtt_user
+        if mqtt_pass:
+            ota_response["mqtt"]["password"] = mqtt_pass
+        log.info(f"[xiaozhi] OTA 返回 MQTT 配置: {mqtt_broker}:{mqtt_port} (device={device_id})")
+
+    return JSONResponse(ota_response)
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
