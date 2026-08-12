@@ -33,6 +33,7 @@ def set_volume(level: int = -1) -> str:
 
 @mcp.tool()
 def set_speech_speed(speed: str = "normal") -> str:
+    log.debug("[set_speech_speed] 被调用")
     """控制 Charlie 说话语速。speed: slow=慢, normal=正常, fast=快, 或直接传数字(0.5-2.0)
 
     例: set_speech_speed("slow") → 慢速说话
@@ -57,6 +58,7 @@ def set_speech_speed(speed: str = "normal") -> str:
 
 @mcp.tool()
 def system_status() -> str:
+    log.debug("[system_status] 被调用")
     """查询当前设备/服务器状态：CPU/内存/磁盘/运行时间
 
     例: system_status() → 返回设备名称、CPU使用率、内存、磁盘、运行时间

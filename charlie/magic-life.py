@@ -38,6 +38,7 @@ def open_lifestyle_app(intent: str, keyword: str = "") -> str:
 
 @mcp.tool()
 def search_charging_stations(city: str = "北京", count: int = 3) -> str:
+    log.debug("[search_charging_stations] 被调用")
     """搜索附近的充电桩(真实高德数据)。参数: city-城市, count-数量
 
     例: search_charging_stations("深圳", 3) → 查找深圳3个充电桩
@@ -62,6 +63,7 @@ def search_charging_stations(city: str = "北京", count: int = 3) -> str:
 
 @mcp.tool()
 def control_tesla_ac(action: str = "on", temperature: int = 22) -> str:
+    log.debug("[control_tesla_ac] 被调用")
     """控制特斯拉空调。action: on/off, temperature: 温度
 
     例: control_tesla_ac("on", 22) → 开启特斯拉空调22度
@@ -72,6 +74,7 @@ def control_tesla_ac(action: str = "on", temperature: int = 22) -> str:
 
 @mcp.tool()
 def leaving_home() -> str:
+    log.debug("[leaving_home] 被调用")
     """场景模式：用户要出门了。自动关闭空调，播报今天天气和注意事项。
 
     例: leaving_home() → 关空调、关电视、播报天气和待办

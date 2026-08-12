@@ -38,6 +38,7 @@ def save_note(title: str = "", content: str = "") -> str:
 
 @mcp.tool()
 def list_notes() -> str:
+    log.debug("[list_notes] 被调用")
     """列出所有语音备忘录
 
     例: list_notes() → 列出所有备忘录

@@ -46,6 +46,7 @@ def add_reminder(text: str, time: str = "", repeat: str = "") -> str:
 
 @mcp.tool()
 def set_timer(minutes: int, message: str = "") -> str:
+    log.debug("[set_timer] 被调用")
     """设置倒计时定时器。minutes=分钟数, message=到点播报内容(可选)
 
     例: set_timer(5, "关火") → 5分钟后播报"主人，5分钟到了：关火"
@@ -64,6 +65,7 @@ def set_timer(minutes: int, message: str = "") -> str:
 
 @mcp.tool()
 def get_calendar_today() -> str:
+    log.debug("[get_calendar_today] 被调用")
     """获取今天的日历日程（从 Apple Calendar 读取，仅macOS可用）
 
     例: get_calendar_today() → 查看今天日程安排
@@ -104,6 +106,7 @@ def get_calendar_today() -> str:
 
 @mcp.tool()
 def schedule_task(name: str, time: str, action: str = "remind") -> str:
+    log.debug("[schedule_task] 被调用")
     """创建定时任务。name=任务名称, time=执行时间(如'每天8点'/'明天10点'/'30分钟后'), action=动作(remind提醒/notify通知)
 
     例: schedule_task("关空调", "每天22点") → 每天22点提醒关空调
@@ -126,6 +129,7 @@ def schedule_task(name: str, time: str, action: str = "remind") -> str:
 
 @mcp.tool()
 def list_alarms() -> str:
+    log.debug("[list_alarms] 被调用")
     """列出所有闹钟和定时任务
 
     例: list_alarms() → 查看所有已设置的闹钟

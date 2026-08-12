@@ -142,6 +142,7 @@ try {{
 
 @mcp.tool()
 def screenshot() -> str:
+    log.debug("[screenshot] 被调用")
     """截取当前浏览器页面的截图，返回页面标题和尺寸
 
     例: screenshot() → 截取当前页面并返回尺寸信息

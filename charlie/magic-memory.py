@@ -96,6 +96,7 @@ _EVENT_PATTERNS = [
 
 
 def _load_memories() -> list:
+    log.debug("[memory] 加载记忆")
     """加载所有记忆"""
     with _memory_lock:
         try:
@@ -104,12 +105,13 @@ def _load_memories() -> list:
                     data = json.load(f)
                 if isinstance(data, list):
                     return data
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"[memory] 读记忆失败: {e}")
         return []
 
 
 def _save_memories(memories: list):
+    log.info(f"[memory] 保存记忆 {len(memories)} 条")
     """保存记忆, 超出上限自动截断"""
     with _memory_lock:
         if len(memories) > MAX_MEMORIES:
@@ -296,6 +298,7 @@ def get_memory_summary() -> dict:
 
 @mcp.tool()
 def recall(query: str) -> str:
+    log.info(f"[memory] 检索记忆: {query[:30]}")
     """回忆与查询相关的记忆。
 
     参数:
@@ -315,6 +318,7 @@ def recall(query: str) -> str:
 
 @mcp.tool()
 def memory_status() -> str:
+    log.debug("[memory] 查询记忆状态")
     """查看记忆系统状态: 总记忆数、标签分布、最近5条记忆。"""
     summary = get_memory_summary()
     lines = [f"记忆总数: {summary['total']}"]
@@ -330,6 +334,7 @@ def memory_status() -> str:
 
 @mcp.tool()
 def correct(query: str, correction: str) -> str:
+    log.info(f"[memory] 修正记忆: {query[:30]}")
     """修正记忆中的错误信息。
 
     参数:
@@ -346,6 +351,7 @@ def correct(query: str, correction: str) -> str:
 
 @mcp.tool()
 def dedup() -> str:
+    log.info("[memory] 去重记忆")
     """合并内容相似的重复记忆, 清理冗余。
 
     例: dedup() → 自动合并相似记忆, 返回清理数量
@@ -356,6 +362,7 @@ def dedup() -> str:
 
 @mcp.tool()
 def forget(query: str) -> str:
+    log.info(f"[memory] 删除记忆: {query[:30]}")
     """删除与查询匹配的记忆。
 
     参数:

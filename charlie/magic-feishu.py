@@ -41,6 +41,7 @@ def _get_token() -> str:
 
 @mcp.tool()
 def search_docs(query: str, count: int = 5) -> str:
+    log.debug("[search_docs] 被调用")
     """搜索飞书云文档。query=搜索关键词, count=返回条数
 
     例: search_docs("项目计划") → 搜索包含"项目计划"的飞书文档
@@ -91,6 +92,7 @@ def send_message(user_id: str, text: str) -> str:
 
 @mcp.tool()
 def list_messages(chat_id: str = "", count: int = 10) -> str:
+    log.debug("[list_messages] 被调用")
     """读取飞书消息。chat_id=群聊ID(可选), count=消息条数
 
     例: list_messages() → 读取最近消息
@@ -120,6 +122,7 @@ def list_messages(chat_id: str = "", count: int = 10) -> str:
 
 @mcp.tool()
 def get_calendar() -> str:
+    log.debug("[get_calendar] 被调用")
     """获取今天的飞书日历日程
 
     例: get_calendar() → 查看今天的飞书日程

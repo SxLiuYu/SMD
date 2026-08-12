@@ -47,8 +47,10 @@ def _run_ego(code: str, timeout: int = 25) -> str:
     try:
         output = _ego_client.run_raw(code, timeout=timeout)
     except EgoError as e:
+        log.warning(f"[apps] ego执行失败(EgoError): {e}")
         return {"status": "error", "text": str(e)[:2000]}
     except Exception as e:
+        log.error(f"[apps] ego执行异常: {e}")
         return {"status": "error", "text": str(e)}
     # 解析 JSON 输出
     lines = output.split('\n')
@@ -58,12 +60,14 @@ def _run_ego(code: str, timeout: int = 25) -> str:
             try:
                 return json.loads(line)
             except json.JSONDecodeError:
+                log.debug(f"[apps] ego输出非JSON，按纯文本处理: {line[:80]}")
                 pass
     return {"status": "ok", "text": output[:3000]}
 
 
 def _open_and_read(url: str, app_name: str, action: str = "读取") -> str:
     """通用：打开App网页版并读取内容"""
+    log.info(f"[apps] {action} {app_name}: {url}")
     result = _run_ego(f"""
 await openOrReuseTab('{url}', {{ wait: true, timeout: 15 }})
 await wait(2)
@@ -73,13 +77,16 @@ const lines = (text || '').split('\\n').filter(l => l.trim().length > 0).slice(0
 cliLog(JSON.stringify({{ title: info.title, url: info.url, content: lines.join('\\n')[:2000] }}))
 """)
     if result.get("status") == "error":
+        log.warning(f"[apps] {app_name}{action}失败: {result.get('text', '')[:100]}")
         return f"{app_name}{action}失败：{result.get('text', '未知错误')}"
+    log.debug(f"[apps] {app_name}{action}成功: {result.get('title', '')[:50]}")
     return f"📱 {app_name}已打开\n{result.get('title', '')}\n\n{result.get('content', '')[:1500]}"
 
 
 def _search_app(url: str, app_name: str, keyword: str) -> str:
     """通用：在App中搜索"""
     search_url = f"{url}search?keyword={keyword}"
+    log.info(f"[apps] {app_name}搜索「{keyword}」")
     result = _run_ego(f"""
 await openOrReuseTab('{search_url}', {{ wait: true, timeout: 15 }})
 await wait(3)
@@ -89,7 +96,9 @@ const lines = (text || '').split('\\n').filter(l => l.trim().length > 5).slice(0
 cliLog(JSON.stringify({{ title: info.title, url: info.url, content: lines.join('\\n')[:2000] }}))
 """)
     if result.get("status") == "error":
+        log.warning(f"[apps] {app_name}搜索失败: {result.get('text', '')[:100]}")
         return f"{app_name}搜索失败：{result.get('text', '未知错误')}"
+    log.debug(f"[apps] {app_name}搜索成功，结果: {result.get('content', '')[:80]}")
     return f"🔍 {app_name}搜索「{keyword}」\n{result.get('content', '')[:1500]}"
 
 

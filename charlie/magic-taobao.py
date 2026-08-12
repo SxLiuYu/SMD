@@ -56,6 +56,7 @@ def search_products(keyword: str, count: int = 5) -> str:
 
 @mcp.tool()
 def search_jd(keyword: str, count: int = 5) -> str:
+    log.debug("[search_jd] 被调用")
     """搜索京东商品。keyword=商品关键词, count=返回条数
 
     例: search_jd("笔记本电脑") → 京东搜索笔记本
@@ -90,6 +91,7 @@ def search_jd(keyword: str, count: int = 5) -> str:
 
 @mcp.tool()
 def compare_price(product: str) -> str:
+    log.debug("[compare_price] 被调用")
     """跨平台比价：同时搜索淘宝和京东。product=商品名
 
     例: compare_price("iPhone 16") → 对比淘宝和京东的iPhone 16价格

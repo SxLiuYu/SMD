@@ -230,6 +230,7 @@ def _split_list(s: str) -> list:
 
 @mcp.tool()
 def search_recipe(keyword: str) -> str:
+    log.debug("[search_recipe] 被调用")
     """按菜名或食材搜索菜谱。
 
     参数:
@@ -281,6 +282,7 @@ def get_recipe(name: str) -> str:
 
 @mcp.tool()
 def list_recipes(category: str = "") -> str:
+    log.debug("[list_recipes] 被调用")
     """列出菜谱库(可按类别筛选)。
 
     参数:
@@ -304,6 +306,7 @@ def list_recipes(category: str = "") -> str:
 
 @mcp.tool()
 def random_recipe() -> str:
+    log.debug("[random_recipe] 被调用")
     """随机推荐一道菜谱。
 
     例: random_recipe() → 随机来一道
@@ -316,6 +319,7 @@ def random_recipe() -> str:
 
 @mcp.tool()
 def recommend_recipe(ingredients: str = "", cuisine: str = "") -> str:
+    log.debug("[recommend_recipe] 被调用")
     """按现有食材推荐一道菜(本地优先，找不到AI生成)。
 
     参数:
@@ -360,6 +364,7 @@ def recommend_recipe(ingredients: str = "", cuisine: str = "") -> str:
 
 @mcp.tool()
 def recommend_daily() -> str:
+    log.debug("[recommend_daily] 被调用")
     """今日个性化推荐6道菜(基于口味画像，带推荐理由)。
 
     例: recommend_daily() → 今日推荐
@@ -485,6 +490,7 @@ def recommend_by_context(context: str) -> str:
 @mcp.tool()
 def add_recipe(name: str, ingredients: str, steps: str,
                difficulty: str = "简单", time: str = "") -> str:
+    log.debug("[add_recipe] 被调用")
     """添加新菜谱到菜谱库。
 
     参数:
@@ -514,6 +520,7 @@ def add_recipe(name: str, ingredients: str, steps: str,
 
 @mcp.tool()
 def generate_recipe(name: str = "", ingredients: str = "") -> str:
+    log.debug("[generate_recipe] 被调用")
     """用AI生成一道新菜谱(本地没有时用)。
 
     参数:

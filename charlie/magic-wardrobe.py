@@ -77,14 +77,26 @@ def simple_outfit_advice(city: str, temp: int, weather_type: str = "晴") -> str
 
 def load_wardrobe() -> list:
     if os.path.exists(WARDROBE_FILE):
-        with open(WARDROBE_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(WARDROBE_FILE, 'r', encoding='utf-8') as f:
+                items = json.load(f)
+            log.debug(f"[wardrobe] 加载衣橱 {len(items)} 件衣物")
+            return items
+        except Exception as e:
+            log.warning(f"[wardrobe] 读衣橱失败: {e}")
+            return []
+    log.debug("[wardrobe] 衣橱文件不存在，返回空")
     return []
 
 
 def save_wardrobe(items: list):
-    with open(WARDROBE_FILE, 'w', encoding='utf-8') as f:
-        json.dump(items, f, ensure_ascii=False, indent=2)
+    try:
+        with open(WARDROBE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(items, f, ensure_ascii=False, indent=2)
+        log.info(f"[wardrobe] 保存衣橱 {len(items)} 件衣物")
+    except Exception as e:
+        log.error(f"[wardrobe] 写衣橱失败: {e}")
+        raise
 
 
 def get_weather(city: str) -> dict:
@@ -104,6 +116,7 @@ def get_weather(city: str) -> dict:
                     w = r2.json()
                     if w.get("status") == "1" and w.get("lives"):
                         live = w["lives"][0]
+                        log.debug(f"[wardrobe] 高德天气成功: {city} {live.get('weather')} {live.get('temperature')}度")
                         return {
                             "city": live.get("city", city),
                             "temp": int(live.get("temperature", 20)),
@@ -111,8 +124,8 @@ def get_weather(city: str) -> dict:
                             "humidity": live.get("humidity", "50"),
                             "wind": live.get("winddirection", "") + live.get("windpower", "") + "级",
                         }
-        except Exception:
-            pass
+        except Exception as e:
+            log.warning(f"[wardrobe] 高德天气失败: {e}")
     # 降级 wttr.in
     try:
         r = requests.get(f"https://wttr.in/{city}?format=j1", timeout=8, headers={"User-Agent": "Wardrobe/1.0"})
@@ -120,13 +133,16 @@ def get_weather(city: str) -> dict:
         cur = d.get("current_condition", [{}])[0]
         temp = int(cur.get("temp_C", 20))
         desc = cur.get("weatherDesc", [{}])[0].get("value", "晴")
+        log.debug(f"[wardrobe] wttr.in降级成功: {city} {desc} {temp}度")
         return {"city": city, "temp": temp, "weather": desc}
-    except Exception:
+    except Exception as e:
+        log.warning(f"[wardrobe] wttr.in也失败: {e}")
         return {"city": city, "temp": 20, "weather": "晴"}
 
 
 def generate_outfit_with_llm(weather: dict, occasion: str = "日常", wardrobe_items: list = None) -> str:
     """用 ARK LLM 生成穿搭建议"""
+    log.info(f"[wardrobe] LLM生成穿搭: occasion={occasion}, weather={weather.get('weather')} {weather.get('temp')}度")
     ark_key = os.getenv("ARK_KEY", "")
     ark_base = os.getenv("ARK_BASE", "https://ark.cn-beijing.volces.com/api/plan/v3")
     ark_model = os.getenv("ARK_MODEL", "ark-code-latest")

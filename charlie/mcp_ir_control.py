@@ -29,6 +29,7 @@ FAN_MAP = {
 }
 
 def _get_api():
+    log.debug("[ir] 初始化Tuya API")
     try:
         from tuya_api import TuyaCloudAPI
         return TuyaCloudAPI()
@@ -37,6 +38,7 @@ def _get_api():
 
 @mcp.tool()
 def ac_control(action: str, temperature: int = 0, fan_speed: str = "") -> str:
+    log.info(f"[ir] 空调控制: {action} {temperature}度 风速={fan_speed}")
     """通过 Tuya 云 API 控制空调（开关、模式、温度、风速）。
     参数:
     - action: on=开机 off=关机 cool=制冷 heat=制热 fan=送风 dry=除湿 auto=自动
@@ -65,12 +67,15 @@ def ac_control(action: str, temperature: int = 0, fan_speed: str = "") -> str:
             return f"不支持的风速: {fan_speed}"
     try:
         api.ac_scenes_command(IR_DEVICE_ID, AC_DEVICE_ID, power=power, mode=mode, temp=eff_temp, wind=wind)
+        log.info(f"[ir] 空调控制成功: {action} {eff_temp}度 风速={fan_speed or '自动'}")
         return f"✅ 空调已{action}，温度 {eff_temp}°C" + (f"，风速 {fan_speed}" if fan_speed else "")
     except Exception as e:
+        log.error(f"[ir] 空调控制失败: {e}")
         return f"❌ 控制失败: {e}"
 
 @mcp.tool()
 def ac_status() -> str:
+    log.info("[ir] 查询空调状态")
     """查询空调当前状态（开关、模式、温度、风速）"""
     api = _get_api()
     try:
@@ -81,8 +86,10 @@ def ac_status() -> str:
         temp = s.get("temp", "?")
         fan_map = {"0": "自动", "1": "低风", "2": "中风", "3": "高风"}
         fan = fan_map.get(str(s.get("wind", "")), "?")
+        log.debug(f"[ir] 空调状态: {power} {mode} {temp}度 {fan}")
         return f"空调状态: {power}，模式: {mode}，温度: {temp}°C，风速: {fan}"
     except Exception as e:
+        log.error(f"[ir] 查询空调状态失败: {e}")
         return f"❌ 查询失败: {e}"
 
 if __name__ == "__main__":

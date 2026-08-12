@@ -227,6 +227,7 @@ def learn_from_history() -> str:
 
 @mcp.tool()
 def self_optimize() -> str:
+    log.debug(f"[evolution] self_optimize被调用")
     """自我优化：根据使用模式自动调整回复策略
 
     如果用户经常打断，缩短回复长度。如果用户经常重复提问，优化回答策略。
@@ -280,6 +281,7 @@ def self_optimize() -> str:
 
 @mcp.tool()
 def suggest_preferences() -> str:
+    log.debug(f"[evolution] suggest_preferences被调用")
     """根据使用模式建议个性化偏好设置
 
     自动发现常用城市、提醒时间、使用习惯等。
@@ -335,6 +337,7 @@ def suggest_preferences() -> str:
 
 @mcp.tool()
 def evolution_status() -> str:
+    log.debug(f"[evolution] evolution_status被调用")
     """查看自进化系统状态：学习进度、适应状态、当前优化项
 
     显示已学习的数据量、当前适应模式、优化建议。

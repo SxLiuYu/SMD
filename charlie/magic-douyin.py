@@ -50,6 +50,7 @@ def search_videos(keyword: str, count: int = 5) -> str:
 
 @mcp.tool()
 def get_trending(count: int = 10) -> str:
+    log.debug("[get_trending] 被调用")
     """获取抖音热门视频/热搜
 
     例: get_trending() → 查看抖音热搜榜
@@ -77,6 +78,7 @@ def get_trending(count: int = 10) -> str:
 
 @mcp.tool()
 def get_video_info(url: str) -> str:
+    log.debug("[get_video_info] 被调用")
     """获取抖音视频信息（无水印视频链接）。url=视频分享链接
 
     例: get_video_info("https://www.douyin.com/video/xxx") → 获取视频信息和下载链接

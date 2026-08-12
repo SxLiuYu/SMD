@@ -43,10 +43,12 @@ def _get_daily_conversations(date_str: str = None) -> list:
                                 "content": str(m.get("content", ""))[:100],
                                 "time": datetime.datetime.fromtimestamp(ts).strftime("%H:%M"),
                             })
-                    except Exception:
+                    except Exception as e:
+                        log.warning(f"[summary] 解析消息失败: {e}")
                         pass
         return conversations
-    except Exception:
+    except Exception as e:
+        log.warning(f"[summary] 读会话文件失败: {e}")
         return []
 
 
@@ -70,7 +72,8 @@ def _get_daily_decisions(date_str: str = None) -> list:
                         "time": trigger_time,
                     })
         return decisions
-    except Exception:
+    except Exception as e:
+        log.warning(f"[summary] 读决策文件失败: {e}")
         return []
 
 
@@ -90,11 +93,13 @@ def _get_daily_memories(date_str: str = None) -> list:
                 if isinstance(m, dict) and m.get("datetime", "").startswith(date_str):
                     memories.append(m.get("summary", m.get("user_text", ""))[:100])
         return memories
-    except Exception:
+    except Exception as e:
+        log.warning(f"[summary] 读决策文件失败: {e}")
         return []
 
 
 def _generate_summary(conversations: list, decisions: list, memories: list, title: str) -> str:
+    log.info(f"[summary] 生成{title}摘要")
     """用 LLM 生成自然语言摘要"""
     if not conversations and not decisions and not memories:
         return f"{title}：今天还没有任何活动记录。"
@@ -165,6 +170,7 @@ def _simple_summary(conversations: list, decisions: list, memories: list, title:
 
 @mcp.tool()
 def daily_summary() -> str:
+    log.info("[summary] 生成今日摘要")
     """生成今日摘要：总结今天的对话、决策和记忆。
 
     例: daily_summary() → 生成今天的每日简报
@@ -178,6 +184,7 @@ def daily_summary() -> str:
 
 @mcp.tool()
 def yesterday_summary() -> str:
+    log.info("[summary] 生成昨日回顾")
     """生成昨日回顾：总结昨天的对话、决策和记忆。
 
     例: yesterday_summary() → 生成昨天的回顾
@@ -191,6 +198,7 @@ def yesterday_summary() -> str:
 
 @mcp.tool()
 def weekly_summary() -> str:
+    log.info("[summary] 生成本周总结")
     """生成本周摘要：总结本周的对话、决策和记忆。
 
     例: weekly_summary() → 生成本周简报

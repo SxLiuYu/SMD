@@ -64,17 +64,21 @@ def _wigolo_search(query: str, timeout: int = 15) -> list:
                 data = _j.loads(r.stdout)
                 if isinstance(data, list):
                     return [{"title": d.get("title", ""), "url": d.get("url", ""), "snippet": d.get("snippet", d.get("content", ""))} for d in data[:8]]
-            except Exception:
+            except Exception as e:
+                log.debug(f"[baize] wigolo非JSON输出: {e}")
                 # Non-JSON output, return as text
                 return [{"title": "wigolo", "url": "", "snippet": r.stdout[:500]}]
     except subprocess.TimeoutExpired:
+        log.warning("[baize] wigolo搜索超时")
         pass
-    except Exception:
+    except Exception as e:
+        log.warning(f"[baize] wigolo搜索异常: {e}")
         pass
     return []
 
 @mcp.tool()
 def web_search_free(query: str) -> str:
+    log.info(f"[baize] 免费搜索: {query[:30]}")
     """免费互联网搜索(不需要API Key)：搜新闻、知识、人物、事件等。query=搜索词"""
     try:
         # 优先使用wigolo(如果可用)
@@ -99,6 +103,7 @@ def web_search_free(query: str) -> str:
 # ===== 通用互联网搜索（Tavily API，更高质量）=====
 @mcp.tool()
 def web_search(query: str) -> str:
+    log.info(f"[baize] 搜索: {query[:30]}")
     """通用互联网搜索：搜新闻、知识、人物、事件等任何内容。query=搜索词"""
     try:
         if not TAVILY:
@@ -123,6 +128,7 @@ def web_search(query: str) -> str:
 # ===== 智能购物 =====
 @mcp.tool()
 def shopping_search(keyword: str) -> str:
+    log.info(f"[baize] 购物搜索: {keyword[:30]}")
     """智能购物推荐：搜什么值得买价格+评测，选出最优前5带真实价格。keyword=商品名"""
     def tavily(query, domains=None):
         body = {"api_key": TAVILY, "query": query, "max_results": 5, "search_depth": "advanced"}
@@ -146,6 +152,7 @@ if __name__ == "__main__":
 
 @mcp.tool()
 def deep_research(topic: str) -> str:
+    log.info(f"[baize] 深度研究: {topic[:30]}")
     """深度研究: 多源搜索+AI聚合分析，适合复杂问题。
 
     例: deep_research("2024年AI芯片市场格局") → 多源搜索+综合分析
