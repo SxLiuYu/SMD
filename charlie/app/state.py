@@ -292,6 +292,36 @@ _ws_session_groups = {}    # {session_id: [ws_id, ...]} — 跨终端会话组
 _ws_client_locations = {}  # {ws_id: {"lat":...,"lng":...,"accuracy":...,"time":...}} — 客户端位置
 _sse_clients_lock = threading.Lock()
 
+# ===== xiaozhi ESP32 WebSocket 连接（主动推送用） =====
+_xiaozhi_clients = {}       # {client_id: {"ws": ws, "loop": event_loop}}
+_xiaozhi_lock = threading.Lock()
+
+
+def register_xiaozhi_client(client_id: str, ws, loop) -> None:
+    """注册 xiaozhi ESP32 WebSocket 连接"""
+    with _xiaozhi_lock:
+        _xiaozhi_clients[client_id] = {"ws": ws, "loop": loop}
+    log.info(f"[xiaozhi] 客户端已注册: {client_id} (总计: {len(_xiaozhi_clients)})")
+
+
+def unregister_xiaozhi_client(client_id: str) -> None:
+    """注销 xiaozhi ESP32 WebSocket 连接"""
+    with _xiaozhi_lock:
+        _xiaozhi_clients.pop(client_id, None)
+    log.info(f"[xiaozhi] 客户端已注销: {client_id}")
+
+
+def snapshot_xiaozhi_clients() -> dict:
+    """获取当前连接的 xiaozhi 客户端快照"""
+    with _xiaozhi_lock:
+        return dict(_xiaozhi_clients)
+
+
+def xiaozhi_client_count() -> int:
+    """当前连接的 xiaozhi 客户端数量"""
+    with _xiaozhi_lock:
+        return len(_xiaozhi_clients)
+
 
 def register_sse_client(client_q: asyncio.Queue) -> None:
     with _sse_clients_lock:

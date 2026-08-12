@@ -709,8 +709,8 @@ def _put_sse_event_nowait(client_q: asyncio.Queue, event_frame: str) -> None:
         unregister_sse_client(client_q)
 
 def _play_reminder_audio(text: str, reminder_id: int | None = None):
-    """生成提醒语音并播放到默认音频输出(AirPods/扬声器)
-    macOS原生用afplay; Linux/容器环境通过SSE推送给浏览器播放"""
+    """生成提醒语音并播放到默认音频输出(AirAirpods/扬声器) + ESP32 + 浏览器SSE
+    macOS原生用afplay; 同时推送到ESP32(xiaozhi WS)和浏览器(SSE)"""
     import platform as _platform
     tmp = None
     delivery_failed = False
@@ -721,6 +721,9 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
         audio = tts_to_mp3(f"主人，提醒您：{text}")
         if not audio or len(audio) < 100:
             raise RuntimeError("TTS返回空音频")
+
+        # 推送到 ESP32 (xiaozhi WebSocket)
+        _push_tts_to_xiaozhi(text, audio)
 
         if _platform.system() == "Darwin":
             # macOS: 用 afplay 直接播放到系统音频设备
@@ -753,6 +756,50 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
             except FileNotFoundError:
                 pass
 _REMINDER_SCHEDULER_STOP = False
+
+
+async def _async_push_tts_to_xiaozhi(ws, text: str, mp3_data: bytes):
+    """异步推送 TTS Opus 音频到单个 ESP32 设备"""
+    import json as _json
+    try:
+        from app.xiaozhi_codec import mp3_to_opus_packets
+        # 1. MP3 → Opus packets (在线程池中执行避免阻塞事件循环)
+        loop = asyncio.get_running_loop()
+        packets = await loop.run_in_executor(None, mp3_to_opus_packets, mp3_data)
+        if not packets:
+            log.warning("[xiaozhi-push] Opus编码失败")
+            return
+        # 2. 发送 TTS 控制消息
+        await ws.send_text(_json.dumps({"type": "tts", "state": "start"}, ensure_ascii=False))
+        await ws.send_text(_json.dumps({"type": "tts", "state": "sentence_start", "text": text}, ensure_ascii=False))
+        # 3. 发送 Opus 音频帧
+        for pkt in packets:
+            await ws.send_bytes(pkt)
+        # 4. 结束 TTS
+        await ws.send_text(_json.dumps({"type": "tts", "state": "stop"}, ensure_ascii=False))
+        log.info(f"[xiaozhi-push] 推送成功: {text[:30]} ({len(packets)}帧)")
+    except Exception as e:
+        log.warning(f"[xiaozhi-push] 推送失败: {e}")
+
+
+def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
+    """推送 TTS 到所有连接的 ESP32 设备（从同步线程调用）"""
+    from app.state import snapshot_xiaozhi_clients
+    clients = snapshot_xiaozhi_clients()
+    if not clients:
+        log.debug("[xiaozhi-push] 无 ESP32 连接，跳过")
+        return
+    for client_id, info in clients.items():
+        ws = info["ws"]
+        loop = info["loop"]
+        try:
+            asyncio.run_coroutine_threadsafe(
+                _async_push_tts_to_xiaozhi(ws, text, mp3_data),
+                loop,
+            )
+            log.info(f"[xiaozhi-push] 调度推送到 {client_id}: {text[:30]}")
+        except Exception as e:
+            log.warning(f"[xiaozhi-push] 调度失败 {client_id}: {e}")
 
 
 def _reminder_scheduler():

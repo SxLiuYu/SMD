@@ -345,6 +345,11 @@ def register_xiaozhi_routes(app: FastAPI):
         resume_played = 0             # how many pending_sentences fully played
         stream_task: Optional[asyncio.Task] = None
 
+        # 注册到全局连接表（主动推送用）
+        from app.state import register_xiaozhi_client, unregister_xiaozhi_client
+        _loop = asyncio.get_running_loop()
+        register_xiaozhi_client(session_id, ws, _loop)
+
         async def cancel_stream():
             nonlocal stream_task
             if stream_task and not stream_task.done():
@@ -942,5 +947,6 @@ def register_xiaozhi_routes(app: FastAPI):
             log.error("[xiaozhi] error: %s", e, exc_info=True)
         finally:
             bump_metric("ws_active", -1)
+            unregister_xiaozhi_client(session_id)
             await cancel_stream()
             log.info("[xiaozhi] session %s cleaned up", session_id)
