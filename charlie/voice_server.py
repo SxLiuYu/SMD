@@ -2176,10 +2176,12 @@ async def xiaozhi_ota(request: Request):
         }
     }
 
-    # 如果配置了 MQTT broker，返回 mqtt 段激活固件 MqttProtocol（常驻连接 + UDP 音频）
-    # 固件逻辑: OTA 含 mqtt 段 → 用 MqttProtocol 替代 WebsocketProtocol
+    # 如果配置了 MQTT broker，返回 mqtt 段激活固件 MqttProtocol
+    # 注意：固件 MqttProtocol 不 subscribe，服务器推送无法到达 idle 状态的 ESP32
+    # 当前保留 mqtt 段用于未来固件支持 subscribe 后启用
+    # 现阶段 ESP32 走 WebsocketProtocol + pending queue 补发
     mqtt_broker = os.getenv("MQTT_BROKER", "")
-    if mqtt_broker:
+    if mqtt_broker and os.getenv("MQTT_ENABLE_OTA", "0") == "1":
         mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
         mqtt_user = os.getenv("MQTT_USER", "")
         mqtt_pass = os.getenv("MQTT_PASSWORD", "")
@@ -3379,6 +3381,8 @@ async def _internal_xiaozhi_push(payload: dict):
     import base64 as _b64
     from app.state import snapshot_xiaozhi_clients
     mp3_data = _b64.b64decode(mp3_b64)
+
+    # 1. WebSocket 直推（ESP32 可能连 WS）
     clients = snapshot_xiaozhi_clients()
     pushed = 0
     for cid, info in clients.items():
@@ -3389,7 +3393,18 @@ async def _internal_xiaozhi_push(payload: dict):
             pushed += 1
         except Exception as e:
             log.warning(f"[xiaozhi-push] 内部转发失败 {cid}: {e}")
-    return {"ok": True, "pushed": pushed, "total": len(clients)}
+
+    # 2. MQTT 直推（ESP32 可能走 MqttProtocol）
+    mqtt_pushed = False
+    try:
+        from app.mqtt_server import push_tts_to_mqtt
+        mqtt_pushed = push_tts_to_mqtt(text, mp3_data)
+        if mqtt_pushed:
+            pushed += 1
+    except Exception:
+        pass
+
+    return {"ok": True, "pushed": pushed, "total": len(clients), "mqtt": mqtt_pushed}
 
 
 if __name__ == "__main__":
