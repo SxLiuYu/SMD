@@ -110,7 +110,7 @@ _DECISION_RULES = [
         "priority": 10,
         "condition": {
             "states": ["home_awake", "working", "home_resting", "unknown"],
-            "hours": (9, 22),
+            "hours": (9, 24),
             "check_desc": "长时间无互动，随机问候",
         },
         "action": {"type": "tts", "text": ""},
