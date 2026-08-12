@@ -196,6 +196,13 @@ def get_location() -> str:
                 parts.append(f"IP定位: {data.get('province','')} {data.get('city','')}")
                 if data.get("rectangle"):
                     parts.append(f"坐标范围: {data['rectangle']}")
+        else:
+            # 降级 ip-api.com（免费无Key）
+            from app.geo import locate
+            loc = locate()
+            if loc:
+                parts.append(f"IP定位: {loc.get('country','')} {loc.get('region','')} {loc.get('city','')}")
+                parts.append(f"经纬度: {loc.get('lat','')}, {loc.get('lon','')}")
     except Exception as e:
         parts.append(f"IP定位失败: {type(e).__name__}")
 
@@ -256,6 +263,41 @@ def get_holiday_info(date: str = "") -> str:
         next_h = upcoming[0]
         return f"{d.isoformat()} 不是公共假日。最近的是 {next_h['date']} {next_h.get('localName', next_h.get('name', ''))}"
     return f"{d.isoformat()} 不是公共假日"
+
+
+@mcp.tool()
+def get_exchange_rate(amount: float = 1, from_currency: str = "USD", to_currency: str = "CNY") -> str:
+    """汇率换算。amount=金额, from_currency=源货币代码, to_currency=目标货币代码
+
+    例: get_exchange_rate(100, "USD", "CNY") → 100美元等于多少人民币
+        get_exchange_rate(1000, "CNY", "JPY") → 1000人民币等于多少日元
+    """
+    from app.exchange_rate import convert, currency_name
+    result = convert(amount, from_currency, to_currency)
+    if result is None:
+        return f"汇率查询失败，不支持 {from_currency}→{to_currency}"
+    from_name = currency_name(from_currency)
+    to_name = currency_name(to_currency)
+    return f"{amount} {from_name}（{from_currency}）= {result} {to_name}（{to_currency}）"
+
+
+@mcp.tool()
+def on_this_day(month: int = 0, day: int = 0, count: int = 5) -> str:
+    """历史上的今天。month=月(1-12), day=日(1-31), 留空查今天
+
+    例: on_this_day() → 今天的5条历史事件
+        on_this_day(7, 4, 3) → 7月4日的历史事件
+    """
+    from app.on_this_day import get_events_text
+    return get_events_text(month or None, day or None, count)
+
+
+@mcp.tool()
+def get_my_location() -> str:
+    """查询当前位置（基于IP定位，无需Key）。
+    当用户问'我在哪''我的IP'时调用。"""
+    from app.geo import locate_text
+    return locate_text()
 
 
 if __name__ == "__main__":
