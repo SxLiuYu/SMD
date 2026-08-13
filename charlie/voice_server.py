@@ -2797,6 +2797,171 @@ async def decisions_config():
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/behaviors")
+async def behaviors_status():
+    """行为模式分析：决策历史时间分布 + 反馈评分 + 活跃时段 + 热门话题"""
+    try:
+        import os, json, time, datetime as _dt
+        from collections import Counter
+
+        # 1. 决策历史 → 时间分布 + 触发频次
+        history = {}
+        try:
+            hf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "decision_history.json")
+            with open(hf, "r") as f:
+                history = json.load(f)
+        except Exception:
+            pass
+        trigger_hours = []
+        trigger_counts = Counter()
+        for rid, info in history.items():
+            if info.get("trigger_time"):
+                try:
+                    t = _dt.datetime.fromisoformat(info["trigger_time"])
+                    trigger_hours.append(t.hour)
+                    trigger_counts[rid] += 1
+                except Exception:
+                    pass
+        hour_dist = dict(Counter(trigger_hours)) if trigger_hours else {}
+        top_triggered = trigger_counts.most_common(5)
+
+        # 2. 反馈评分
+        feedback = {}
+        try:
+            ff = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "decision_feedback.json")
+            with open(ff, "r") as f:
+                feedback = json.load(f)
+        except Exception:
+            pass
+        import app.magic_decisions_test as _mdt
+        rules = _mdt.get_rules() if hasattr(_mdt, 'get_rules') else []
+        feedback_scores = {}
+        for r in rules:
+            rid = r["id"]
+            fb = feedback.get(rid, {"positive": 0, "negative": 0})
+            total = fb["positive"] + fb["negative"]
+            score = fb["positive"] / total if total > 0 else None
+            feedback_scores[rid] = {"score": round(score, 2) if score is not None else None, "total": total}
+
+        # 3. 活跃时段（从对话历史推算）
+        active_hours = {}
+        try:
+            chf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "conversation_history.json")
+            if os.path.exists(chf):
+                with open(chf, "r") as f:
+                    ch = json.load(f)
+                for sid, msgs in (ch if isinstance(ch, dict) else {}).items():
+                    for m in (msgs if isinstance(msgs, list) else []):
+                        if isinstance(m, dict) and m.get("ts"):
+                            try:
+                                h = _dt.datetime.fromtimestamp(float(m["ts"])).hour
+                                slot = f"{h//3*3}-{(h//3+1)*3}点"
+                                active_hours[slot] = active_hours.get(slot, 0) + 1
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+
+        # 4. 习惯数据
+        habits = {}
+        try:
+            hf2 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "habits.json")
+            if os.path.exists(hf2):
+                with open(hf2, "r") as f:
+                    habits_raw = json.load(f)
+                for habit, data in habits_raw.items():
+                    logs = data.get("logs", [])
+                    habits[habit] = {"days": len(logs), "streak": 0}
+                    # 简单连续天数
+                    streak = 0
+                    today = _dt.date.today()
+                    for d_str in sorted(logs, reverse=True)[:30]:
+                        try:
+                            d = _dt.date.fromisoformat(d_str)
+                            if (today - d).days <= streak + 1:
+                                streak += 1
+                            else:
+                                break
+                        except Exception:
+                            break
+                    habits[habit]["streak"] = streak
+        except Exception:
+            pass
+
+        return {
+            "decision_triggers": top_triggered,
+            "hour_distribution": hour_dist,
+            "feedback_scores": feedback_scores,
+            "active_hours": dict(sorted(active_hours.items(), key=lambda x: x[1], reverse=True)),
+            "habits": habits,
+            "total_decisions_triggered": sum(trigger_counts.values()),
+            "total_conversations": sum(1 for s in (history if isinstance(history, dict) else {}).values() for _ in [1]),
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/habits")
+async def habits_status():
+    """习惯追踪数据：打卡记录、连续天数、完成率"""
+    try:
+        import os, json, datetime as _dt
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        habits_file = os.path.join(data_dir, "habits.json")
+        if not os.path.exists(habits_file):
+            return {"total": 0, "habits": {}, "insight": "暂无习惯数据，开始记录吧"}
+
+        with open(habits_file, "r", encoding="utf-8") as f:
+            habits = json.load(f)
+
+        today = _dt.date.today()
+        result = {}
+        for habit, data in habits.items():
+            logs = data.get("logs", [])
+            created = data.get("created", "")
+            # 连续天数
+            streak = 0
+            check = today
+            for d_str in sorted(set(logs), reverse=True):
+                try:
+                    d = _dt.date.fromisoformat(d_str)
+                    if (check - d).days <= streak:
+                        streak += 1
+                    else:
+                        break
+                except Exception:
+                    break
+            # 本周打卡
+            week_start = today - _dt.timedelta(days=today.weekday())
+            week_logs = [d for d in logs if _dt.date.fromisoformat(d) >= week_start] if logs else []
+            # 总打卡天数
+            total_days = len(logs)
+            # 最近一次
+            last_log = sorted(logs)[-1] if logs else None
+
+            result[habit] = {
+                "total_days": total_days,
+                "streak": streak,
+                "week_days": len(week_logs),
+                "week_target": 7,
+                "last_log": last_log,
+                "created": created,
+                "completed_today": today.strftime("%Y-%m-%d") in logs,
+            }
+
+        # 洞察：连续打卡最多的习惯
+        best = max(result.items(), key=lambda x: x[1]["streak"]) if result else (None, {})
+        insight = ""
+        if best[0]:
+            insight = f"🔥 连续打卡最长：{best[0]}（{best[1]['streak']}天）"
+        elif total_days := sum(r["total_days"] for r in result.values()):
+            insight = f"已记录{total_days}次习惯打卡"
+
+        return {"total": len(result), "habits": result, "insight": insight}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/memory")
 async def memory_status():
     """叙事性记忆状态"""

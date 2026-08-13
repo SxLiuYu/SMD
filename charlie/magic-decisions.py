@@ -218,6 +218,14 @@ def _get_feedback_score(rule_id: str) -> float:
     return pos / total
 
 
+def _get_effective_priority(rule_id: str, base_priority: int) -> int:
+    """根据反馈评分动态调整规则优先级: score越低，优先级衰减越多"""
+    score = _get_feedback_score(rule_id)
+    # score 0.0 → 优先级×0.1, score 0.5 → 优先级×0.6, score 1.0 → 优先级×1.0
+    adjusted = base_priority * (0.1 + 0.9 * score)
+    return max(1, int(round(adjusted)))
+
+
 def _should_skip_rule(rule_id: str) -> bool:
     """检查是否应该跳过此规则 (负面反馈过多)"""
     score = _get_feedback_score(rule_id)
