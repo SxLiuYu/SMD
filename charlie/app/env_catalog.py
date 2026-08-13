@@ -5,7 +5,7 @@
 - 启动校验、setup 页面白名单、.env 模板生成 都从此派生
 
 设计原则：
-- "必需"宽松化 — 缺 key 不阻塞启动，由 Demo 模式（Ollama）兜底
+- "必需"宽松化 — 缺 key 不阻塞启动，由智谱 GLM 免费 Key 兜底（无需本地硬件）
 - "分组"驱动 setup 页面卡片渲染
 - "可调参"(tunable=True) 的高级参数不进 setup 白名单，避免界面臃肿
 """
@@ -71,7 +71,7 @@ def is_configured(name: str) -> bool:
 
 GROUP_ORDER = [
     "core",          # 大脑 + 语音 + 天气（最小可用集）
-    "llm_fallback",  # Ollama 本地降级 / Demo 模式
+    "llm_fallback",  # Ollama 本地可选（需硬件支持）
     "asr_local",     # SenseVoice 本地 ASR
     "feishu",        # 飞书消息/推送
     "tuya",          # 涂鸦红外空调
@@ -104,7 +104,7 @@ ENTRIES: list[EnvEntry] = [
     # --- core（核心：缺这些只会降级，但建议都配） ---
     EnvEntry("ARK_KEY", required=True, group="core", secret=True, demo_supported=True,
              get_guide="https://console.volcengine.com/ark",
-             description="火山引擎 ARK 大脑 LLM。未配置时自动启用 Demo 模式（Ollama 本地）"),
+             description="火山引擎 ARK 大脑 LLM（可选）。未配置时用智谱 GLM 免费大脑"),
     EnvEntry("ARK_BASE", default="https://ark.cn-beijing.volces.com/api/plan/v3",
              group="core", tunable=True,
              description="ARK API 基址（火山引擎北京区）"),
@@ -134,13 +134,15 @@ ENTRIES: list[EnvEntry] = [
              get_guide="https://console.amap.com",
              description="高德地图 Key（天气查询）"),
 
-    # --- llm_fallback（Demo 模式核心） ---
+    # --- llm_fallback（Ollama 本地可选，需硬件支持） ---
+    EnvEntry("OLLAMA_ENABLED", default="0", group="llm_fallback",
+             tunable=True,
+             description="是否启用 Ollama 本地模式（1=启用，需安装 Ollama 且硬件足够）"),
     EnvEntry("OLLAMA_HOST", default="http://localhost:11434", group="llm_fallback",
-             demo_supported=True,
-             description="Ollama 服务地址。未配 ARK_KEY 时大脑自动走这里（Demo 模式）"),
+             description="Ollama 服务地址（仅在 OLLAMA_ENABLED=1 时使用）"),
     EnvEntry("OLLAMA_MODEL", default="qwen3.5:2b", group="llm_fallback",
-             demo_supported=True, tunable=True,
-             description="Ollama 兜底模型，需 ollama pull <model>"),
+             tunable=True,
+             description="Ollama 本地模型名，需 ollama pull <model>（仅在 OLLAMA_ENABLED=1 时使用）"),
 
     # --- asr_local（本地 SenseVoice ASR） ---
     EnvEntry("SENSE_VOICE_MODEL", default="models/sense-voice",
@@ -320,15 +322,18 @@ def missing_required() -> list[EnvEntry]:
 
 
 def llm_available() -> bool:
-    """是否有任何一种 LLM 可用：ARK 已配、智谱 GLM 免费 Key 已配、或 Ollama Demo 模式可用
+    """是否有任何一种 LLM 可用：ARK 已配或智谱 GLM 免费 Key 已配
 
-    Demo 模式不强制要求 Ollama 在线（启动后可后装），只要未配 ARK/GLM 就认为走 Demo。
+    开箱即用版推荐 GLM 免费 Key + 百度免费 ASR/TTS，无需本地 GPU。
     """
     return is_configured("ARK_KEY") or is_configured("GLM_KEY")
 
 
 def demo_mode_active() -> bool:
-    """当前是否处于 Demo 模式（未配 ARK_KEY 且未配 GLM_KEY）"""
+    """当前是否处于未配置状态（未配 ARK_KEY 且未配 GLM_KEY）
+
+    此状态下启动会引导用户注册免费 GLM Key，不再默认依赖 Ollama。
+    """
     return not (is_configured("ARK_KEY") or is_configured("GLM_KEY"))
 
 

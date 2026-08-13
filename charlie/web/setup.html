@@ -55,7 +55,7 @@ h1 .icon{width:36px;height:36px;background:linear-gradient(135deg,#667eea,#764ba
 
 <div id="demoBox" class="demo-check" style="display:none">
   <input type="checkbox" id="demoAccept">
-  <label for="demoAccept">使用 Demo 模式（Ollama 本地模型，无需 ARK_KEY）</label>
+  <label for="demoAccept">暂不配置 LLM（稍后在 /welcome 引导页注册免费 GLM Key）</label>
 </div>
 
 <button class="btn" id="saveBtn" onclick="save()">保存配置</button>
@@ -86,7 +86,7 @@ function renderBanner(){
   const b = document.getElementById('banner');
   if(demoActive){
     b.className = 'banner demo';
-    b.textContent = '⚠️ 当前为 Demo 模式（未配置 ARK_KEY）。大脑使用 Ollama 本地模型，能力有限。填写 ARK_KEY 或勾选下方「Demo 模式」可保存。';
+    b.textContent = '⚠️ 未配置 LLM Key。推荐注册智谱 GLM 免费 Key（注册即送，glm-4.7-flash 永久免费）。填写 ARK_KEY/GLM_KEY 或勾选下方跳过可保存。';
     b.style.display = 'block';
   }else if(llmAvailable){
     b.className = 'banner ok';

@@ -1136,16 +1136,18 @@ def _brain_llm(text: str, session_id: str = "default") -> str:
     """LLM 路径：意图分类 → Demo 拦截 → brain.run → Ollama fallback → reply 提取"""
     mcp_set = _classify_intent(text)
 
-    # Demo 规则模式拦截
-    if _demo_mode_active() and not _ollama_online():
+    # 未配置 LLM Key → 引导用户注册免费 GLM Key
+    if _demo_mode_active() and not (
+        os.getenv("OLLAMA_ENABLED", "0") == "1" and _ollama_online()
+    ):
         _port = 8000
         try:
             from app.config import http_port as _hp
             _port = _hp()
         except Exception:
             pass
-        reply = (f"Demo 模式能力有限，我处理不了这个请求。"
-                 f"请配置 ARK_KEY 或 GLM_KEY 解锁完整能力：http://localhost:{_port}/welcome")
+        reply = (f"我还没配置 AI 大脑。注册智谱 GLM 免费 Key 即可解锁完整能力（注册即送，永久免费）：\n"
+                 f"  打开 http://localhost:{_port}/welcome 按引导操作")
         _append_history(_get_history(session_id), text, reply)
         return reply
 

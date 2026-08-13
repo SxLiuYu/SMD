@@ -97,11 +97,14 @@ def ollama_online() -> bool:
 
 
 def resolve() -> dict:
-    """返回 llm_cfg dict（ARK > 智谱 GLM 免费 > Ollama Demo）
+    """返回 llm_cfg dict（ARK > 智谱 GLM 免费 > Ollama 本地可选）
 
-    - ARK_KEY 已配 → ARK 配置
-    - GLM_KEY 已配 → 智谱 GLM 免费大脑（glm-4-flash 永久免费，OpenAI 兼容）
-    - 都没配 → Demo 模式：Ollama 在线用 Ollama，离线 raise RuntimeError
+    优先级:
+    - ARK_KEY 已配 → 火山引擎 ARK
+    - GLM_KEY 已配 → 智谱 GLM 免费大脑（glm-4.7-flash 永久免费，云端无需本地硬件）
+    - 都没配 → Ollama 本地（仅当用户明确启用且服务在线时），否则引导用户注册免费 GLM Key
+
+    开箱即用版推荐: GLM免费Key + 百度免费ASR/TTS额度，无需本地GPU。
     """
     if is_ark_configured():
         return {
@@ -120,12 +123,20 @@ def resolve() -> dict:
             'generate_cfg': {'use_raw_api': True, 'max_tokens': 512,
                              'extra_body': {'thinking': {'type': 'disabled'}}},
         }
-    # Demo 模式：Ollama 兜底
-    if not ollama_online():
-        raise RuntimeError(f"Demo 模式: Ollama 服务或模型 {OLLAMA_MODEL} 不可用，可在引导页配置智谱 GLM 免费 Key")
-    log.warning(f"[llm] ━━━ Demo 模式 ━━━ 使用 Ollama {OLLAMA_MODEL}")
-    return {
-        'model': OLLAMA_MODEL, 'model_type': 'oai',
-        'api_base': OLLAMA_OPENAI_BASE, 'api_key': 'ollama',
-        'generate_cfg': {'use_raw_api': True, 'extra_body': {'extra_body': {'enable_thinking': False}}, 'max_tokens': 512},
-    }
+    # 无任何云端 LLM Key → 尝试 Ollama 本地（需用户自行安装，对硬件有要求）
+    if os.getenv("OLLAMA_ENABLED", "0") == "1" and ollama_online():
+        log.warning(f"[llm] ━━━ 本地模式 ━━━ Ollama {OLLAMA_MODEL}（需本地硬件支持）")
+        return {
+            'model': OLLAMA_MODEL, 'model_type': 'oai',
+            'api_base': OLLAMA_OPENAI_BASE, 'api_key': 'ollama',
+            'generate_cfg': {'use_raw_api': True, 'extra_body': {'extra_body': {'enable_thinking': False}}, 'max_tokens': 512},
+        }
+    # 无可用 LLM → 引导用户注册免费 GLM Key
+    raise RuntimeError(
+        "未配置 LLM。请注册智谱 GLM 免费 Key（注册即送，glm-4.7-flash 永久免费）：\n"
+        "  1. 打开 https://open.bigmodel.cn 注册账号\n"
+        "  2. 「API Keys」→ 添加新 Key → 复制\n"
+        "  3. 在 .env 或 /welcome 引导页填入 GLM_KEY=你的Key\n"
+        "  4. 重启 Charlie 即可使用免费 AI 大脑\n"
+        "（如需纯本地离线运行，安装 Ollama 后设置 OLLAMA_ENABLED=1）"
+    )
