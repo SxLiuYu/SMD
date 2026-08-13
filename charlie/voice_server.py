@@ -534,14 +534,14 @@ def _check_rate(ip: str, bucket_type: str, limit: int) -> tuple:
     """检查速率, 返回(allowed, remaining, retry_after)"""
     import time as _t
     now = _t.time()
-    # 定期清理过期IP桶(防内存泄漏, 每5分钟)
-    if len(_rate_buckets) > 1000:
-        expired = [k for k, v in _rate_buckets.items()
-                   if all(not v.get(bt) or now - v[bt][-1] > _RATE_WINDOW
-                          for bt in ("voice", "general"))]
-        for k in expired:
-            del _rate_buckets[k]
     with _RATE_LOCK:
+        # 定期清理过期IP桶(防内存泄漏, 在锁内避免竞态)
+        if len(_rate_buckets) > 1000:
+            expired = [k for k, v in _rate_buckets.items()
+                       if all(not v.get(bt) or now - v[bt][-1] > _RATE_WINDOW
+                              for bt in ("voice", "general"))]
+            for k in expired:
+                del _rate_buckets[k]
         if ip not in _rate_buckets:
             _rate_buckets[ip] = {}
         bucket = _rate_buckets[ip].setdefault(bucket_type, [])
@@ -3372,8 +3372,19 @@ register_xiaozhi_routes(app)
 # HTTP进程(8000)跑决策引擎，ESP32连HTTPS进程(8443)。
 # HTTP进程通过 POST /api/internal/xiaozhi-push 转发到HTTPS进程。
 @app.post("/api/internal/xiaozhi-push")
-async def _internal_xiaozhi_push(payload: dict):
+async def _internal_xiaozhi_push(payload: dict, request: Request):
     """接收跨进程推送请求，转发TTS到所有已连接的ESP32"""
+    # 内部端点认证：共享密钥或仅允许本机
+    internal_token = os.getenv("INTERNAL_API_TOKEN", "")
+    if internal_token:
+        auth = request.headers.get("X-Internal-Token", "")
+        if auth != internal_token:
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    else:
+        # 无 token 时仅允许本机访问
+        client_ip = request.client.host if request.client else ""
+        if client_ip not in ("127.0.0.1", "::1", "localhost"):
+            return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     text = payload.get("text", "")
     mp3_b64 = payload.get("mp3", "")
     if not text or not mp3_b64:

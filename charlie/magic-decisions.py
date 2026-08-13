@@ -142,15 +142,16 @@ def _save_feedback(feedback: dict):
 
 
 def record_feedback(rule_id: str, is_positive: bool):
-    """记录用户对决策的反馈: True=接受, False=拒绝"""
-    feedback = _load_feedback()
-    entry = feedback.get(rule_id, {"positive": 0, "negative": 0})
-    if is_positive:
-        entry["positive"] = entry.get("positive", 0) + 1
-    else:
-        entry["negative"] = entry.get("negative", 0) + 1
-    feedback[rule_id] = entry
-    _save_feedback(feedback)
+    """记录用户对决策的反馈: True=接受, False=拒绝（原子 read-modify-write）"""
+    with _decision_lock:
+        feedback = _load_feedback()
+        entry = feedback.get(rule_id, {"positive": 0, "negative": 0})
+        if is_positive:
+            entry["positive"] = entry.get("positive", 0) + 1
+        else:
+            entry["negative"] = entry.get("negative", 0) + 1
+        feedback[rule_id] = entry
+        _save_feedback(feedback)
     log.info(f"[decision] 反馈记录: {rule_id} {'正面' if is_positive else '负面'} "
              f"(正面{entry['positive']}, 负面{entry['negative']})")
 

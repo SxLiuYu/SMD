@@ -708,6 +708,10 @@ def register_xiaozhi_routes(app: FastAPI):
             await send_json({"type": "tts", "state": "stop"})
             log.info("[audio] wake beep played (%d pkts)", len(bkts))
 
+        if opuslib is None:
+            log.error("[xiaozhi] opuslib not available, closing connection")
+            await ws.close(code=1011)
+            return
         decoder = opuslib.Decoder(UPLINK_SAMPLE_RATE, 1)
         _load_silero_vad()  # 预加载 Silero VAD, 避免首帧推理延迟
         tail = deque(maxlen=HEAD_START_FRAMES)  # rolling pre-speech frames
@@ -894,7 +898,7 @@ def register_xiaozhi_routes(app: FastAPI):
                             cand = (cand.get("device_id") or cand.get("mac")
                                     or cand.get("client_id") or cand.get("name"))
                         if cand:
-                            device_key = re.sub(r"[^09A-Za-z_-]", "", str(cand))[:32] or device_key
+                            device_key = re.sub(r"[^0-9A-Za-z_-]", "", str(cand))[:32] or device_key
                             break
                     await send_json({
                         "type": "hello",

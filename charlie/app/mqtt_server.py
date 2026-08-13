@@ -310,6 +310,7 @@ class MqttXiaozhiServer:
         speech_count = 0
         silence_count = 0
         utterance_active = False
+        hot_frames = 0
         from collections import deque
         tail = deque(maxlen=12)  # 预语音滚动缓冲
 
@@ -355,11 +356,15 @@ class MqttXiaozhiServer:
                 else:
                     rms = 0
 
-                # Silero VAD（如果可用）
+                # Silero VAD（复用 xiaozhi_ws 的模型，避免重复加载）
                 vad_speech = False
                 try:
-                    from app.vad import is_speech
-                    vad_speech = is_speech(pcm, rms, 500)
+                    from app.xiaozhi_ws import _is_speech_vad, _load_silero_vad
+                    vad_model = _load_silero_vad()
+                    if vad_model:
+                        vad_speech = _is_speech_vad(vad_model, pcm, rms, 0.5)
+                    else:
+                        vad_speech = rms > 500
                 except Exception:
                     vad_speech = rms > 500
 
@@ -369,17 +374,17 @@ class MqttXiaozhiServer:
                     # 未开始说话：滚动缓冲 + 热帧计数
                     tail.append(opus_frame)
                     if is_hot:
-                        session["hot_frames"] = session.get("hot_frames", 0) + 1
-                        if session.get("hot_frames", 0) >= 3:
+                        hot_frames += 1
+                        if hot_frames >= 3:
                             # 语音开始
                             buf_frames = list(tail)
                             speech_count = 1
                             silence_count = 0
                             utterance_active = True
-                            session["hot_frames"] = 0
+                            hot_frames = 0
                             log.info("[mqtt-server] speech start (%d tail frames)", len(buf_frames))
                     else:
-                        session["hot_frames"] = 0
+                        hot_frames = 0
                     continue
 
                 # 说话中：收集帧直到静音

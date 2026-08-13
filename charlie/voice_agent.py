@@ -408,7 +408,7 @@ def _classify_intent(text: str) -> str:
             with _intent_cache_lock:
                 _intent_failures = 0
                 _intent_disabled_until = 0.0
-            _cache_set("__intent__:" + text, mcp)
+            _intent_cache_set(text, mcp)
             log.info(f"[intent] '{text[:30]}' → {mcp} ({raw[:15]}) [重试成功]")
             return mcp
         except Exception as e2:
