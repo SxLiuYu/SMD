@@ -61,3 +61,7 @@ assistant-kid/
 
 # 运行时缓存
 charlie/.baidu_token*.json
+
+# 交付用 patch / 运行时 token 缓存
+/*.patch
+charlie/.baidu_token*.json

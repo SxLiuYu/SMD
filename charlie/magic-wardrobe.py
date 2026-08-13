@@ -8,7 +8,7 @@
 - 添加/删除衣物
 - 后期接入摄像头: 拍照 → 识别 → 推荐
 
-依赖: /Users/sxliuyu/wardrobe/ (颜色搭配规则 + 衣橱数据)
+依赖: ~/.charlie/wardrobe/ (颜色搭配规则 + 衣橱数据)
 """
 from mcp.server.fastmcp import FastMCP
 import os, json, requests, datetime, re

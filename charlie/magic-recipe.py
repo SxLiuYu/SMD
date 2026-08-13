@@ -8,7 +8,7 @@
 - 场景推荐(想吃辣的/想吃肉/来点清爽的)
 - AI 生成新菜谱
 
-依赖: /Users/sxliuyu/recipe-app/data/ (recipes.json + wife_profile.json + order_history.json)
+依赖: ~/.charlie/recipe-app/data/ (recipes.json + wife_profile.json + order_history.json)
 """
 import os, json, random, re
 from datetime import datetime, timedelta

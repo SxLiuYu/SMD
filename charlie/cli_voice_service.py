@@ -187,7 +187,7 @@ def main():
     print("=" * 46)
     print(f"🎤 麦克风: [{dev}] {mic_name}")
     print(f"🧠 大脑: Unisound u2 + MCP")
-    print(f"🔊 输出: afplay (扬声器)")
+    print(f"🔊 输出: {'afplay' if sys.platform == 'darwin' else 'winsound' if os.name == 'nt' else 'aplay'} (扬声器)")
     print()
 
     for wav in vad_loop(dev, stop_event):

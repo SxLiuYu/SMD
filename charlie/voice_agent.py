@@ -4,7 +4,7 @@ Charlie - 语音Agent核心
 连接韧性: Session复用 + 自动重试 + 异常降级
 对话记忆: 跨请求保留历史上下文，支持多轮连续对话，持久化到磁盘
 """
-import os, sys, json, copy, base64, requests, datetime, time, logging, asyncio, re, random, tempfile, threading
+import os, sys, json, copy, base64, requests, datetime, time, logging, asyncio, re, random, tempfile, threading, platform
 try:
     from openai import RateLimitError as _RateLimitError
 except ImportError:  # openai 未安装时降级，退回字符串匹配
@@ -397,8 +397,8 @@ def _classify_intent(text: str) -> str:
         log.warning(f"[intent] 本地分类失败,默认none: text='{text[:20]}' err={e}")
         # 尝试Ollama降级(本地模型, 无429风险)
         try:
-            r = _session.post("http://localhost:11434/api/chat",
-                json={"model": "qwen3.5:2b",
+            r = _session.post(f"{OLLAMA_HOST}/api/chat",
+                json={"model": OLLAMA_MODEL,
                       "messages": [{"role": "user", "content": prompt}],
                       "stream": False, "think": False,
                       "options": {"num_predict": 10, "temperature": 0}},
@@ -563,8 +563,8 @@ def _ollama_fallback(text: str, messages: list) -> str:
         # 确保 system message 存在
         if not ollama_msgs or ollama_msgs[0]["role"] != "system":
             ollama_msgs.insert(0, {"role": "system", "content": "你是Charlie，搭档级AI助理。直接、偶尔幽默、不废话。不知道就说不知道，不编造。别输出占用语，第一句就是答案。"})
-        r = _req.post("http://localhost:11434/api/chat", json={
-            "model": "qwen3.5:2b",
+        r = _req.post(f"{OLLAMA_HOST}/api/chat", json={
+            "model": OLLAMA_MODEL,
             "messages": ollama_msgs,
             "stream": False,
             "think": False,
@@ -611,13 +611,24 @@ def _direct_vision_analyze(text: str) -> str:
     if not question or len(question) < 2:
         question = "描述这张图片的内容"
     try:
-        # Step 1: 截图 (macOS screencapture)
+        # Step 1: 截图（跨平台：macOS screencapture / Win+Linux 用 mss）
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             screenshot_path = tmp.name
-        subprocess.run(
-            ["screencapture", "-x", screenshot_path],
-            timeout=5, check=True
-        )
+        if platform.system() == "Darwin":
+            subprocess.run(["screencapture", "-x", screenshot_path], timeout=5, check=True)
+        else:
+            try:
+                import mss  # type: ignore
+                with mss.mss() as sct:
+                    sct.shot(output=screenshot_path)
+            except Exception:
+                # 退路：Windows 用 PowerShell + .NET，Linux 用 scrot/import
+                if os.name == "nt":
+                    subprocess.run(['powershell', '-NoProfile', '-Command',
+                        'Add-Type -AssemblyName System.Drawing; [System.Drawing.Screen]::PrimaryScreen.Bounds | ForEach-Object { $b=$_; $bmp=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $bmp.Save("' + screenshot_path.replace('\\','/') + '"); $g.Dispose(); $bmp.Dispose() }'],
+                        timeout=8, check=True)
+                else:
+                    subprocess.run(['scrot', screenshot_path], timeout=5, check=True)
         # Step 2: 调用 vision.py 分析截图
         r = subprocess.run(
             [sys.executable, VISION_SCRIPT, screenshot_path, "-q", question],
@@ -863,46 +874,106 @@ def _direct_ac_control(text: str) -> str:
     return ""
 
 
+def _set_volume(delta_pct: int) -> bool:
+    """跨平台系统音量增减(delta_pct 正=调大/负=调小)。返回是否成功。"""
+    import subprocess
+    _sys = platform.system()
+    try:
+        if _sys == "Darwin":
+            op = "+" if delta_pct >= 0 else ""
+            subprocess.run(['osascript', '-e', f'set volume output volume (output volume of (get volume settings) {op}{delta_pct})'], timeout=3)
+        elif _sys == "Windows":
+            # Windows 无系统音量 CLI，用可选 pycaw（缺失则静默失败）
+            try:
+                import comtypes  # type: ignore
+                from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume  # type: ignore
+                from ctypes import cast, POINTER
+            except Exception:
+                return False
+            dev = AudioUtilities.GetSpeakers()
+            iface = dev.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None)
+            vol = cast(iface, POINTER(IAudioEndpointVolume))
+            cur = vol.GetMasterVolumeLevelScalar()
+            vol.SetMasterVolumeLevelScalar(max(0.0, min(1.0, cur + delta_pct / 100.0)), None)
+        else:  # Linux
+            import shutil
+            if shutil.which('amixer'):
+                subprocess.run(['amixer', '-q', 'set', 'Master', f'{delta_pct}%+'], timeout=3)
+            elif shutil.which('pactl'):
+                subprocess.run(['pactl', 'set-sink-volume', '@DEFAULT_SINK@', f'{delta_pct}%+'], timeout=3)
+            else:
+                return False
+        return True
+    except Exception:
+        return False
+
+
+def _mute_volume() -> bool:
+    """跨平台静音。"""
+    import subprocess
+    _sys = platform.system()
+    try:
+        if _sys == "Darwin":
+            subprocess.run(['osascript', '-e', 'set volume output muted true'], timeout=3)
+        elif _sys == "Windows":
+            import comtypes  # type: ignore
+            from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume  # type: ignore
+            from ctypes import cast, POINTER
+            dev = AudioUtilities.GetSpeakers()
+            iface = dev.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None)
+            vol = cast(iface, POINTER(IAudioEndpointVolume))
+            vol.SetMute(1, None)
+        else:
+            import shutil
+            if shutil.which('amixer'):
+                subprocess.run(['amixer', '-q', 'set', 'Master', 'mute'], timeout=3)
+            elif shutil.which('pactl'):
+                subprocess.run(['pactl', 'set-sink-mute', '@DEFAULT_SINK@', 'toggle'], timeout=3)
+            else:
+                return False
+        return True
+    except Exception:
+        return False
+
+
+def _sleep_display() -> bool:
+    """跨平台让显示器进入睡眠。"""
+    import subprocess
+    _sys = platform.system()
+    try:
+        if _sys == "Darwin":
+            subprocess.run(['pmset', 'displaysleepnow'], timeout=3)
+        elif _sys == "Windows":
+            # 关闭显示器（SendMessage SC_MONITORPOWER）
+            subprocess.run(['powershell', '-NoProfile', '-Command',
+                            '(Add-Type "[DllImport(\"user32.dll\")]public static extern int SendMessage(int h,int m,int w,int l);" -Name Win -Namespace Win); [Win]::SendMessage(-1,0x0112,0xF170,2) | Out-Null'],
+                           timeout=5)
+        else:
+            subprocess.run(['xdg-screensaver', 'activate'], timeout=3)
+        return True
+    except Exception:
+        return False
+
+
 def _handle_smart_command(text: str) -> str | None:
     """智能语音快捷命令: 不走 brain, 直接执行系统操作
     支持: 停止/暂停、音量控制、静音、睡眠模式
     返回: 回复文本(已处理) 或 None(不匹配, 交给 brain)
     """
-    import subprocess
     text_lower = text.strip().lower()
     # 系统音量控制
     if any(kw in text for kw in ['音量大', '大声点', '大一点', 'volume up', '音量加']):
-        try:
-            subprocess.run(['osascript', '-e', 'set volume output volume (output volume of (get volume settings) + 20)'], timeout=3)
-            return '音量已调大。'
-        except Exception:
-            return None
+        return '音量已调大。' if _set_volume(20) else None
     if any(kw in text for kw in ['音量小', '小声点', '小一点', 'volume down', '音量减']):
-        try:
-            subprocess.run(['osascript', '-e', 'set volume output volume (output volume of (get volume settings) - 20)'], timeout=3)
-            return '音量已调小。'
-        except Exception:
-            return None
+        return '音量已调小。' if _set_volume(-20) else None
     if any(kw in text for kw in ['静音', 'mute', '消音']):
-        try:
-            subprocess.run(['osascript', '-e', 'set volume output muted true'], timeout=3)
-            return '已静音。'
-        except Exception:
-            return None
+        return '已静音。' if _mute_volume() else None
     # 停止/暂停 — 当前无法中断 TTS, 但可以给用户反馈
     if text_lower in ('停止', '暂停', '停', 'stop', 'pause', '闭嘴'):
-        try:
-            subprocess.run(['osascript', '-e', 'set volume output muted true'], timeout=3)
-            return '好的，我停。'
-        except Exception:
-            return None
+        return '好的，我停。' if _mute_volume() else None
     # 睡眠模式
     if any(kw in text for kw in ['睡眠', '休眠', 'sleep', '显示器关闭']):
-        try:
-            subprocess.run(['pmset', 'displaysleepnow'], timeout=3)
-            return '已进入睡眠模式。'
-        except Exception:
-            return None
+        return '已进入睡眠模式。' if _sleep_display() else None
     return None
 
 

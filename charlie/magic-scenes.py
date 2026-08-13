@@ -169,9 +169,31 @@ def _tv_control(action: str) -> str:
 
 
 def _set_volume(level: int) -> str:
-    """设置系统音量"""
+    """设置系统音量（跨平台）"""
     try:
-        subprocess.run(["osascript", "-e", f"set volume output volume {level}"], timeout=5)
+        import platform as _pf
+        _sys = _pf.system()
+        if _sys == "Darwin":
+            subprocess.run(["osascript", "-e", f"set volume output volume {level}"], timeout=5)
+        elif _sys == "Windows":
+            try:
+                import comtypes  # type: ignore
+                from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume  # type: ignore
+                from ctypes import cast, POINTER
+                dev = AudioUtilities.GetSpeakers()
+                iface = dev.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None)
+                vol = cast(iface, POINTER(IAudioEndpointVolume))
+                vol.SetMasterVolumeLevelScalar(max(0.0, min(1.0, level / 100.0)), None)
+            except Exception:
+                return "Windows 音量调节需安装 pycaw（pip install pycaw）"
+        else:  # Linux
+            import shutil
+            if shutil.which('amixer'):
+                subprocess.run(['amixer', '-q', 'set', 'Master', f'{level}%'], timeout=5)
+            elif shutil.which('pactl'):
+                subprocess.run(['pactl', 'set-sink-volume', '@DEFAULT_SINK@', f'{level}%'], timeout=5)
+            else:
+                return "音量调节失败：未找到 amixer/pactl"
         return f"音量已调至{level}%"
     except Exception:
         return "音量调节失败"
