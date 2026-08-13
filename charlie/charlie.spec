@@ -189,6 +189,7 @@ exe = EXE(
     target_architecture=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='charlie.ico',
 )
 
 coll = COLLECT(

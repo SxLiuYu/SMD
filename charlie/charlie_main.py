@@ -18,6 +18,39 @@ import logging
 log = logging.getLogger("magic")
 
 
+# Windows 下 GUI 程序派生子进程(MCP/ffmpeg/视觉脚本)会弹 cmd 黑框一闪而过。
+# 全局给 subprocess.Popen/Run 注入 CREATE_NO_WINDOW 标志，静默子进程。
+# 必须在 qwen_agent/MCP 任何子进程启动前完成（模块导入即生效）。
+if os.name == "nt":
+    import subprocess as _sp
+    _CREATE_NO_WINDOW = 0x08000000
+    _OrigPopen = _sp.Popen
+
+    class _NoWindowPopen(_OrigPopen):
+        def __init__(self, *args, **kwargs):
+            cf = kwargs.get("creationflags", 0)
+            if not (cf & _CREATE_NO_WINDOW):
+                kwargs["creationflags"] = cf | _CREATE_NO_WINDOW
+            super().__init__(*args, **kwargs)
+
+    _sp.Popen = _NoWindowPopen
+    # 同时 patch asyncio 的 subprocess 创建器（mcp SDK 走 asyncio.create_subprocess_exec）
+    try:
+        import asyncio as _aio
+        _orig_csp = _aio.create_subprocess_exec
+
+        async def _csp_no_window(*args, **kwargs):
+            if "creationflags" not in kwargs:
+                # asyncio 在 Windows 把 creationflags 传给 CreateProcess；注入 CREATE_NO_WINDOW
+                # 注意:ProactorEventLoop 下 async subprocess 支持该参数
+                kwargs["creationflags"] = _CREATE_NO_WINDOW
+            return await _orig_csp(*args, **kwargs)
+
+        _aio.create_subprocess_exec = _csp_no_window
+    except Exception:
+        pass
+
+
 def _ensure_first_run(base_dir: str) -> str:
     """首次启动检测：缺 .env 则从 .env.example 复制。
 
