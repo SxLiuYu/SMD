@@ -105,7 +105,7 @@ class TestMagicDecisions:
             os.remove(os.path.join(TMP_DIR, f))
 
     def test_rules_count(self):
-        assert len(self.dec._DECISION_RULES) == 7  # 6 original + meeting_reminder
+        assert len(self.dec._DECISION_RULES) == 12  # expanded rules: morning_wakeup/weather_alert/meeting_reminder/leaving_reminder/lunch_reminder/evening_wind_down/sedentary_break/evening_wrapup/arrive_home/deadline_reminder/casual_checkin
 
     def test_evaluate_home_awake_morning(self):
         # Should not trigger (cooldown or time mismatch)
@@ -146,7 +146,7 @@ class TestMagicDecisions:
 
     def test_meeting_reminder_rule_exists(self):
         ids = [r["id"] for r in self.dec._DECISION_RULES]
-        assert "meeting_reminder" in ids
+        assert set(["morning_wakeup","weather_alert","meeting_reminder","leaving_reminder","lunch_reminder","evening_wind_down","sedentary_break","evening_wrapup","arrive_home","deadline_reminder","casual_checkin"]).issubset(set(ids))
 
 
 # ===== magic-scenes tests =====
