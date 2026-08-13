@@ -113,9 +113,9 @@ input::placeholder{color:#555}
 <div class="step" id="step3">
   <div style="text-align:center;font-size:42px;margin:10px 0 14px">✅</div>
   <div class="stage-title" style="text-align:center">配置完成！</div>
-  <div class="stage-desc" style="text-align:center;margin-top:8px">Key 已保存。<b>请重启 Charlie</b>（关闭窗口再打开 charlie.exe）后生效，然后回到主界面即可语音对话。</div>
+  <div class="stage-desc" style="text-align:center;margin-top:8px">Key 已保存并即时生效，回到主界面即可开始语音对话。</div>
   <button class="btn" onclick="location.href='/'">进入主界面 →</button>
-  <div class="link-row"><a href="javascript:location.reload()">我已重启，重新检测配置</a></div>
+  <div class="link-row"><a href="javascript:location.reload()">重新检测配置</a></div>
 </div>
 
 <div class="link-row"><a href="/setup">高级：完整 Key 配置页</a> · <a href="javascript:skipDemo()">暂时跳过（功能受限）</a></div>
@@ -147,13 +147,37 @@ async function postSetup(data){
   const r=await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   return r.json();
 }
+async function verifyKeys(data){
+  // 保存后实时校验 Key 有效性（后台请求百度/智谱），结果展示给用户
+  try{
+    const r=await fetch('/api/setup/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    return await r.json();
+  }catch(e){return null}
+}
+function fmtVerify(v){
+  if(!v||!v.results)return '';
+  const msgs=[];
+  for(const [k,r] of Object.entries(v.results)){
+    const label=k==='glm'?'大脑':'语音';
+    msgs.push((r.ok?'✅':'⚠️')+label+'：'+r.message);
+  }
+  return msgs.join('　');
+}
 async function saveStep1(){
   const v=vals();
   if(!v.BAIDU_APP_ID||!v.BAIDU_API_KEY||!v.BAIDU_SECRET_KEY){banner('请先填完三项百度 Key（或点“暂时跳过”）','err');return}
   document.getElementById('next1').disabled=true;
+  banner('正在保存并验证百度语音 Key…','');
   try{
     const d=await postSetup(v);
-    if(d.ok){banner('百度语音 Key 已保存 ✓','ok');show('step2');setStage(2)}
+    if(d.ok){
+      const vr=await verifyKeys(v);
+      const baidu=vr&&vr.results&&vr.results.baidu;
+      if(baidu&&!baidu.ok){banner('百度 Key 已保存，但验证未通过：'+baidu.message+'（可继续，之后在设置里修改）','err')}
+      else if(baidu&&baidu.ok){banner('百度语音 Key 已保存并验证通过 ✓','ok')}
+      else{banner('百度语音 Key 已保存 ✓','ok')}
+      show('step2');setStage(2);
+    }
     else banner('保存失败：'+(d.error||''),'err');
   }catch(e){banner('保存失败：'+e,'err')}
   document.getElementById('next1').disabled=false;
@@ -162,9 +186,17 @@ async function saveStep2(){
   const v={GLM_KEY:(document.getElementById('GLM_KEY').value||'').trim()};
   if(!v.GLM_KEY){banner('请先填入智谱 GLM 免费 Key（或点“暂时跳过”）','err');return}
   document.getElementById('next2').disabled=true;
+  banner('正在保存并验证智谱 GLM Key…','');
   try{
     const d=await postSetup(v);
-    if(d.ok){banner('免费大脑 Key 已保存 ✓','ok');show('step3');setStage(3)}
+    if(d.ok){
+      const vr=await verifyKeys(v);
+      const glm=vr&&vr.results&&vr.results.glm;
+      if(glm&&!glm.ok){banner('GLM Key 已保存，但验证未通过：'+glm.message+'（可继续，之后在设置里修改）','err')}
+      else if(glm&&glm.ok){banner('免费大脑 Key 已保存并验证通过 ✓','ok')}
+      else{banner('免费大脑 Key 已保存 ✓','ok')}
+      show('step3');setStage(3);
+    }
     else banner('保存失败：'+(d.error||''),'err');
   }catch(e){banner('保存失败：'+e,'err')}
   document.getElementById('next2').disabled=false;

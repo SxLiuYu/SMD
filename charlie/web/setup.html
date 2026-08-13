@@ -167,7 +167,7 @@ async function save(){
     const d = await r.json();
     if(d.ok){
       b.className = 'banner ok';
-      b.textContent = '✅ 配置已保存，需要重启 Charlie 生效';
+      b.textContent = '✅ 配置已保存并即时生效';
       b.style.display = 'block';
       btn.textContent = '已保存';
     }else{

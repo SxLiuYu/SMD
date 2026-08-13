@@ -53,6 +53,16 @@ def _ollama_online() -> bool:
     """探测 Ollama 服务是否在线 — 委托到 llm_config"""
     return _ollama_online_impl()
 
+
+def _llm_has_any_key() -> bool:
+    """进程环境里是否存在任一可用 LLM Key（GLM/ARK）。
+
+    用于把"未配置 Key"与"配置了但构建崩溃"区分开，分别给出引导信息和真实错误。
+    注意：实时读 os.environ，覆盖 setup 热重载后的新值。
+    """
+    from app import env_catalog as _ec
+    return _ec.is_configured("GLM_KEY") or _ec.is_configured("ARK_KEY")
+
 EMPTY_ASR_TEXT = "(未识别到语音)"
 EMPTY_ASR_REPLY = "抱歉，我没听清，请再说一遍。"
 INTENT_FAILURE_THRESHOLD = int(os.getenv("ASSISTANT_KID_INTENT_FAILURE_THRESHOLD", "2"))
@@ -521,6 +531,28 @@ def restart_brain() -> str:
         _brain_failures = 0
     log.info("[brain] 手动重启, 所有缓存大脑已清除")
     return "大脑重启中, 下次请求将自动重建"
+
+
+def reload_brain_config() -> str:
+    """配置热重载：/welcome 引导页保存 Key 后即时生效，无需重启进程。
+
+    1. 从 os.environ 刷新 llm_config 模块级全局变量（已由调用方 load_dotenv 写入）
+    2. 清除所有缓存大脑 + MCP 连接，下次请求用新 Key 重建
+    3. 重置失败计数
+    """
+    global _brains, _brain_failures
+    try:
+        from app import llm_config as _llm_cfg
+        _llm_cfg.reload()
+    except Exception as e:
+        log.warning(f"[brain] llm_config.reload 失败: {e}")
+    with _brain_lock:
+        for k, b in list(_brains.items()):
+            _cleanup_brain_processes(b)
+        _brains.clear()
+        _brain_failures = 0
+    log.info("[brain] 配置已热重载, 缓存大脑已清除, 下次请求用新配置重建")
+    return "配置已生效，大脑将在下次对话时使用新配置重建"
 
 def set_current_user(user_id: str):
     """切换当前用户, 更新所有数据文件路径"""
@@ -1161,7 +1193,12 @@ def _brain_llm(text: str, session_id: str = "default") -> str:
             brain_instance = _get_brain(mcp_set)
         except Exception as e:
             _record_brain_failure(str(e)[:60])
-            return "大脑启动失败，请稍后重试。"
+            log.error(f"[brain] 构建失败: {e}", exc_info=True)
+            # 未配 Key 给引导；已配但崩溃给真实原因，便于排查
+            if not _llm_has_any_key():
+                return ("我还没配置 AI 大脑。注册智谱 GLM 免费 Key 即可解锁完整能力"
+                        "（注册即送，永久免费）：打开 /welcome 按引导操作")
+            return f"大脑启动失败：{str(e)[:80]}。请稍后重试。"
 
         hist = _get_history(session_id)
         messages = [{'role': m['role'], 'content': m['content']} for m in hist] + [{'role': 'user', 'content': text}]
@@ -1324,11 +1361,40 @@ def brain_stream_sentences(text: str, session_id: str = "default", interrupted_r
     except Exception:
         pass
     _ensure_event_loop()
+
+    # Demo 模式（未配 GLM/ARK Key）：流式路径同样先引导注册，避免直接抛"未配置LLM"被吞成"大脑启动失败"
+    if _demo_mode_active() and not (
+        os.getenv("OLLAMA_ENABLED", "0") == "1" and _ollama_online()
+    ):
+        _port = 8000
+        try:
+            from app.config import http_port as _hp
+            _port = _hp()
+        except Exception:
+            pass
+        message = (f"我还没配置 AI 大脑。注册智谱 GLM 免费 Key 即可解锁完整能力（注册即送，永久免费）：\n"
+                   f"  打开 http://localhost:{_port}/welcome 按引导操作")
+        _append_history(_get_history(session_id), text, message)
+        yield (message, message)
+        return
+
     try:
         brain_instance = _get_brain(mcp_set)
     except Exception as e:
         _record_brain_failure(str(e)[:60])
-        message = "大脑启动失败，请稍后重试。"
+        # 暴露真实原因（未配 Key 时给出引导），而不是笼统的"大脑启动失败"让用户无从排查
+        if not _llm_has_any_key():
+            _port = 8000
+            try:
+                from app.config import http_port as _hp
+                _port = _hp()
+            except Exception:
+                pass
+            message = (f"我还没配置 AI 大脑。注册智谱 GLM 免费 Key 即可解锁：\n"
+                       f"  打开 http://localhost:{_port}/welcome 按引导操作")
+        else:
+            log.error(f"[brain] 构建失败: {e}", exc_info=True)
+            message = f"大脑启动失败：{str(e)[:80]}。请稍后重试。"
         yield (message, message)
         return
 

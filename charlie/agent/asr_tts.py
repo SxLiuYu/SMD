@@ -51,6 +51,50 @@ _tts_failures = 0
 _tts_lock = threading.Lock()
 _tts_speed = float(os.getenv("TTS_SPEED", "1.0"))  # e.g. 0.9 slow / 1.1 fast
 
+
+def reload() -> None:
+    """配置热重载：从 os.environ 重新读取百度凭证 + TTS 参数。
+
+    /welcome 或 /setup 保存 Key 后由 voice_server._reload_runtime_env() 调用，
+    无需重启进程即可让新填入的百度 ASR/TTS Key 生效。
+
+    同时：
+    - 清掉内存里用旧（可能为空）凭证拿到/失败的百度 token
+    - 删除落盘的 .baidu_token.json（避免旧 token 被复用）
+    - 重置 TTS 熔断状态（否则即使 Key 正确也要等冷却结束）
+    """
+    global BAIDU_APP_ID, BAIDU_API_KEY, BAIDU_SECRET_KEY
+    global TTS_VOICE, TTS_MODEL, TTS_FAILURE_COOLDOWN, TTS_FAILURE_THRESHOLD
+    global _tts_speed, _tts_unavailable_until, _tts_failures
+
+    BAIDU_APP_ID = os.getenv("BAIDU_APP_ID", "")
+    BAIDU_API_KEY = os.getenv("BAIDU_API_KEY", "")
+    BAIDU_SECRET_KEY = os.getenv("BAIDU_SECRET_KEY", "")
+
+    TTS_VOICE = os.getenv("TTS_VOICE", "Ethan")
+    TTS_MODEL = os.getenv("TTS_MODEL", "qwen3-tts-flash")
+    TTS_FAILURE_COOLDOWN = float(os.getenv("TTS_FAILURE_COOLDOWN", "120"))
+    TTS_FAILURE_THRESHOLD = int(os.getenv("TTS_FAILURE_THRESHOLD", "3"))
+    _tts_speed = float(os.getenv("TTS_SPEED", "1.0"))
+
+    # 清空旧 token（内存 + 落盘文件），下次用新凭证重新获取
+    with _baidu_token_lock:
+        _baidu_token["token"] = ""
+        _baidu_token["at"] = 0.0
+    try:
+        if os.path.exists(BAIDU_TOKEN_FILE):
+            os.remove(BAIDU_TOKEN_FILE)
+    except Exception:
+        pass
+
+    # 重置熔断，让新 Key 能立即尝试合成
+    with _tts_lock:
+        _tts_failures = 0
+        _tts_unavailable_until = 0.0
+
+    log.info(f"[asr_tts] 配置已热重载: 百度Key={'已配置' if BAIDU_API_KEY else '未配置'}, "
+             f"voice={TTS_VOICE}, model={TTS_MODEL}")
+
 _asr_fallback_times: list = []
 _asr_lock = threading.Lock()
 
@@ -288,6 +332,39 @@ def _baidu_get_token() -> str:
     except Exception:
         pass
     return token
+
+
+def verify_baidu_key(app_id: str = "", api_key: str = "", secret_key: str = "") -> tuple[bool, str]:
+    """验证百度语音三件套是否有效（实时请求百度 OAuth 接口）。
+
+    返回 (ok, message)。用 OAuth client_credentials 换 token：
+    - 200 + access_token → 凭证有效
+    - 401/400 → 凭证错误（展示百度返回的错误描述）
+    - 网络异常 → 提示检查网络，但不阻断保存
+    """
+    app_id = (app_id or BAIDU_APP_ID).strip()
+    api_key = (api_key or BAIDU_API_KEY).strip()
+    secret_key = (secret_key or BAIDU_SECRET_KEY).strip()
+    if not app_id or not api_key or not secret_key:
+        return False, "请填全 App ID、API Key、Secret Key 三项"
+    try:
+        import requests as _req
+        r = _req.post("https://aip.baidubce.com/oauth/2.0/token", params={
+            "grant_type": "client_credentials",
+            "client_id": api_key,
+            "client_secret": secret_key,
+        }, timeout=8)
+        if r.status_code == 200 and r.json().get("access_token"):
+            return True, "百度语音 Key 验证通过"
+        try:
+            err = r.json()
+            desc = err.get("error_description") or err.get("error") or r.text[:120]
+        except Exception:
+            desc = r.text[:120]
+        return False, f"百度 Key 无效：{desc}"
+    except Exception as e:
+        return False, f"无法连接百度验证服务器（{e}），Key 已保存，可稍后重试"
+
 
 def _asr_baidu(audio_bytes: bytes, fmt: str = "mp3") -> str:
     if fmt == "wav":

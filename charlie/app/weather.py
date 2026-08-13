@@ -180,8 +180,6 @@ def get_weather_text(city: str = "北京") -> str:
         parts.append("穿羽绒服+保暖内衣")
 
     result = "。".join(parts) + "。"
-    if src == "open-meteo":
-        result += "（天气数据来自 Open-Meteo）"
     return result
 
 

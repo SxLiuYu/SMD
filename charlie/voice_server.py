@@ -1398,6 +1398,7 @@ async def voice_api(file: UploadFile = File(...)):
 # ===== 流式端点: 大脑逐句产出 → TTS批量推送(SSE) =====
 _TTS_BATCH_SIZE = 30  # TTS批量大小(字符数)，降低延迟
 TTS_DEGRADED_MESSAGE = "语音服务繁忙，本轮先显示文字回复。"
+TTS_UNCONFIGURED_MESSAGE = "语音合成未配置，已显示文字回复。可在设置中填入百度语音 Key 开启语音。"
 BRAIN_BUSY_MESSAGE = "大脑服务繁忙，请稍后再试。"
 _SSE_DONE_FRAME = 'data: {"type":"done"}\n\n'
 _SSE_HEARTBEAT_FRAME = ': heartbeat\n\n'
@@ -1468,7 +1469,14 @@ async def _synthesize_tts_event(tts_buffer: str):
         return audio_b64, None
     except Exception as e:
         log.warning(f"流式TTS失败，降级为文字: {e}")
-        return "", {"type": "warning", "message": TTS_DEGRADED_MESSAGE}
+        # 区分"未配置语音 Key"与"真的服务繁忙/熔断"，避免误导用户
+        try:
+            from agent import asr_tts as _at
+            configured = bool(_at.BAIDU_APP_ID and _at.BAIDU_API_KEY and _at.BAIDU_SECRET_KEY)
+        except Exception:
+            configured = True
+        msg = TTS_DEGRADED_MESSAGE if configured else TTS_UNCONFIGURED_MESSAGE
+        return "", {"type": "warning", "message": msg}
 
 async def _stream_brain_tts(text: str, asr_text: str = "", session_id: str = "default"):
     """
@@ -1519,7 +1527,13 @@ async def _stream_brain_tts(text: str, asr_text: str = "", session_id: str = "de
             audio_b64 = _flush_tts_buffer(text_to_synth)
             tts_q.put(("result", text_to_synth, audio_b64, None))
         except Exception as e:
-            tts_q.put(("error", text_to_synth, None, {"type": "warning", "message": TTS_DEGRADED_MESSAGE}))
+            try:
+                from agent import asr_tts as _at
+                configured = bool(_at.BAIDU_APP_ID and _at.BAIDU_API_KEY and _at.BAIDU_SECRET_KEY)
+            except Exception:
+                configured = True
+            msg = TTS_DEGRADED_MESSAGE if configured else TTS_UNCONFIGURED_MESSAGE
+            tts_q.put(("error", text_to_synth, None, {"type": "warning", "message": msg}))
     
     while True:
         # 检查 brain 队列
@@ -3184,6 +3198,41 @@ def _write_env_file(path: str, data: dict) -> None:
     with open(path, "w", encoding="utf-8") as f:
         f.writelines(out_lines)
 
+
+def _reload_runtime_env() -> None:
+    """把刚写入 .env 的新配置热重载到运行进程（无需重启 Charlie）。
+
+    顺序：
+    1. load_dotenv(override=True) 把 .env 新值写入 os.environ（覆盖旧值）
+    2. llm_config.reload() 刷新模块级全局变量（GLM_KEY 等在导入时快照的变量）
+    3. voice_agent.reload_brain_config() 清除缓存大脑，下次请求用新 Key 重建
+    任一环节失败都不阻塞保存（文件已落盘，重启仍可生效），仅记日志。
+    """
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_ENV_FILE, override=True)
+        log.info(f"[setup] os.environ 已从 {_ENV_FILE} 重载")
+    except Exception as e:
+        log.warning(f"[setup] load_dotenv 重载失败: {e}")
+    try:
+        from app import llm_config as _llm_cfg
+        _llm_cfg.reload()
+    except Exception as e:
+        log.warning(f"[setup] llm_config.reload 失败: {e}")
+    try:
+        # 百度 ASR/TTS 凭证同样在导入期快照，必须热重载 + 清 token/熔断
+        from agent import asr_tts as _asr_tts
+        _asr_tts.reload()
+    except Exception as e:
+        log.warning(f"[setup] asr_tts.reload 失败: {e}")
+    try:
+        import voice_agent
+        voice_agent.reload_brain_config()
+    except Exception as e:
+        log.warning(f"[setup] reload_brain_config 失败: {e}")
+
+
+
 @app.api_route("/setup", methods=["GET", "HEAD"], response_class=HTMLResponse)
 async def setup_page(request: Request):
     """浏览器配置页面 — 用户通过网页填写 API 密钥"""
@@ -3338,14 +3387,55 @@ async def post_setup(request: Request):
     demo_accept = str(data.get("demo_accept", "false")).lower() in ("1", "true", "yes", "on")
     try:
         _write_env_file(_ENV_FILE, safe_data)
+        # 热重载：把新 Key 注入 os.environ + 刷新 llm_config + 清大脑缓存，
+        # 让用户在 /welcome 保存后立即对话，无需重启 Charlie
+        _reload_runtime_env()
         # 反馈 LLM 是否就绪（合并已存 .env 值），供前端引导判断
         existing = _parse_env_file(_ENV_FILE)
         llm_ready = bool(existing.get("ARK_KEY")) or bool(existing.get("GLM_KEY"))
-        log.info(f"[setup] 配置已保存到 {_ENV_FILE} (demo_accept={demo_accept}, llm_ready={llm_ready})")
-        return {"ok": True, "message": "配置已保存，需要重启 Charlie 生效", "llm_ready": llm_ready}
+        log.info(f"[setup] 配置已保存并热重载到 {_ENV_FILE} (demo_accept={demo_accept}, llm_ready={llm_ready})")
+        return {"ok": True, "message": "配置已保存并即时生效", "llm_ready": llm_ready}
     except Exception as e:
         log.error(f"[setup] 保存失败: {e}")
         return JSONResponse({"ok": False, "error": f"保存失败: {e}"}, status_code=500)
+
+
+@app.post("/api/setup/verify")
+async def verify_setup(request: Request):
+    """实时校验已保存的 Key 是否有效（向导保存后调用，把结果反馈给用户）。
+
+    校验 GLM 大脑 Key 与百度语音三件套，返回每项 {ok, message}。
+    在后台线程跑（网络请求），避免阻塞事件循环。校验失败不影响已保存的配置。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    results: dict[str, dict] = {}
+
+    def _check_glm():
+        from app import llm_config as _lc
+        ok, msg = _lc.verify_glm_key(body.get("GLM_KEY", ""), body.get("GLM_MODEL", ""))
+        results["glm"] = {"ok": ok, "message": msg}
+
+    def _check_baidu():
+        from agent import asr_tts as _at
+        ok, msg = _at.verify_baidu_key(
+            body.get("BAIDU_APP_ID", ""), body.get("BAIDU_API_KEY", ""),
+            body.get("BAIDU_SECRET_KEY", ""))
+        results["baidu"] = {"ok": ok, "message": msg}
+
+    # 仅校验本次提交或已配置的项，避免无意义的网络请求
+    tasks = []
+    if body.get("GLM_KEY") or env_catalog.is_configured("GLM_KEY"):
+        tasks.append(_check_glm)
+    if (body.get("BAIDU_API_KEY") or env_catalog.is_configured("BAIDU_API_KEY")):
+        tasks.append(_check_baidu)
+
+    loop = asyncio.get_event_loop()
+    await asyncio.gather(*[loop.run_in_executor(None, t) for t in tasks])
+    all_ok = all(r.get("ok") for r in results.values()) if results else True
+    return {"ok": all_ok, "results": results}
 
 
 @app.get("/api/setup/mcp-status")

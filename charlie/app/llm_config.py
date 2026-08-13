@@ -48,6 +48,72 @@ def rotate_glm_model() -> str:
     return GLM_MODELS[_glm_idx]
 
 
+def reload() -> None:
+    """在不重启进程的前提下，从 os.environ 重新读取所有 LLM 配置。
+
+    用于 /welcome 引导页保存 Key 后即时生效：
+    1. voice_server 先 load_dotenv(override=True) 把新 .env 写入 os.environ
+    2. 调用本函数刷新本模块的模块级全局变量（resolve() 直接引用它们）
+    3. voice_agent.reload_brain_config() 清除缓存大脑，下次请求用新配置重建
+    """
+    global OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_OPENAI_BASE
+    global ARK_BASE, ARK_KEY, ARK_MODEL
+    global GLM_BASE, GLM_KEY, GLM_MODEL, GLM_MODELS, _glm_idx
+
+    OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:2b")
+    OLLAMA_OPENAI_BASE = OLLAMA_HOST + "/v1"
+
+    ARK_BASE = os.getenv("ARK_BASE", "https://ark.cn-beijing.volces.com/api/plan/v3")
+    ARK_KEY = os.getenv("ARK_KEY", "")
+    ARK_MODEL = os.getenv("ARK_MODEL", "ark-code-latest")
+
+    GLM_BASE = os.getenv("GLM_BASE", "https://open.bigmodel.cn/api/paas/v4")
+    GLM_KEY = os.getenv("GLM_KEY", "")
+    GLM_MODEL = os.getenv("GLM_MODEL", "glm-4.7-flash")
+
+    GLM_MODELS = [m.strip() for m in os.getenv("GLM_MODELS",
+        "glm-4.7-flash,glm-4-flash,glm-4.5-flash").split(",") if m.strip()]
+    if GLM_MODEL and GLM_MODEL not in GLM_MODELS:
+        GLM_MODELS.insert(0, GLM_MODEL)
+    _glm_idx = 0
+    log.info(f"[llm] 配置已热重载: GLM={'已配置' if GLM_KEY else '未配置'}, "
+             f"ARK={'已配置' if ARK_KEY else '未配置'}, model={GLM_MODEL}")
+
+
+def verify_glm_key(api_key: str = "", model: str = "") -> tuple[bool, str]:
+    """验证智谱 GLM Key 是否有效（发一个最小的 chat/completions 请求）。
+
+    返回 (ok, message)。max_tokens=1 保持轻量；网络错误不阻断保存。
+    """
+    key = (api_key or GLM_KEY).strip()
+    mdl = (model or GLM_MODEL or "glm-4-flash").strip()
+    if not key:
+        return False, "请填入 GLM Key"
+    try:
+        import requests as _req
+        r = _req.post(f"{GLM_BASE.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={"model": mdl, "messages": [{"role": "user", "content": "hi"}],
+                  "max_tokens": 1, "extra_body": {"thinking": {"type": "disabled"}}},
+            timeout=10)
+        if r.status_code == 200:
+            return True, f"GLM Key 验证通过（{mdl}）"
+        try:
+            err = r.json()
+            desc = err.get("error", {}).get("message") if isinstance(err.get("error"), dict) else err.get("error")
+            desc = desc or r.text[:120]
+        except Exception:
+            desc = r.text[:120]
+        # 429/模型繁忙不等于 Key 无效：Key 本身有效，实际使用时有模型轮换兜底
+        if r.status_code == 429 or "访问量过大" in str(desc) or "rate" in str(desc).lower() or "429" in str(desc):
+            return True, f"GLM Key 有效（{mdl} 当前繁忙，将自动切换备用模型）"
+        # 401/403/key 错误才是真正的 Key 无效
+        return False, f"GLM Key 无效：{desc}"
+    except Exception as e:
+        return False, f"无法连接智谱验证服务器（{e}），Key 已保存，可稍后重试"
+
+
 def is_glm_configured() -> bool:
     """智谱 GLM 免费 Key 是否已配置"""
     from app.env_catalog import is_configured
