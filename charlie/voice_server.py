@@ -657,6 +657,9 @@ def _drain_notifications() -> list[dict]:
 FEISHU_PUSH_OPEN_ID = os.getenv("FEISHU_PUSH_OPEN_ID", "")
 FEISHU_PUSH_ENABLED = os.getenv("FEISHU_PUSH_ENABLED", "1") == "1" and bool(FEISHU_PUSH_OPEN_ID)
 
+# ntfy 备用通知通道(自托管或 https://ntfy.sh)
+from app.ntfy_push import push_ntfy_async as _push_ntfy_async
+
 def _push_feishu_async(text: str):
     """异步推飞书消息(线程, 不阻塞通知/SSE)。所有主动服务触发时自动推送。"""
     if not FEISHU_PUSH_ENABLED:
@@ -680,7 +683,7 @@ def _push_feishu_async(text: str):
     threading.Thread(target=_send, daemon=True).start()
 
 def _add_notification(text: str, ntype: str = "reminder"):
-    """添加通知到队列+SSE推送+飞书推送"""
+    """添加通知到队列+SSE推送+飞书推送+ntfy备用"""
     notification = {
         "text": text, "type": ntype,
         "time": datetime.datetime.now().isoformat()
@@ -689,6 +692,7 @@ def _add_notification(text: str, ntype: str = "reminder"):
     if sse_client_count():
         _push_notification_to_sse(_sse_event(notification))  # SSE实时推送
     _push_feishu_async(text)  # 飞书消息推送(异步, 不阻塞)
+    _push_ntfy_async(text)  # ntfy 备用通道(异步, 不阻塞)
 
 # ===== SSE实时通知推送 =====
 _main_loop = None  # 主线程event loop(启动时捕获)
