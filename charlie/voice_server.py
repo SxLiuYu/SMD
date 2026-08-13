@@ -131,6 +131,9 @@ async def lifespan(app):
     else:
         global _main_loop
         _main_loop = asyncio.get_running_loop()
+        # 启动 MQTT xiaozhi 协议端（ESP32 常驻连接 + UDP 音频）
+        from app.mqtt_server import init_server as init_mqtt_server
+        init_mqtt_server(_main_loop)
         # 启动时清理临时文件 + 截断历史
         from utils import cleanup_temp_files, truncate_history_file
         from voice_agent import runtime_temp_audio_path
@@ -531,14 +534,14 @@ def _check_rate(ip: str, bucket_type: str, limit: int) -> tuple:
     """检查速率, 返回(allowed, remaining, retry_after)"""
     import time as _t
     now = _t.time()
-    # 定期清理过期IP桶(防内存泄漏, 每5分钟)
-    if len(_rate_buckets) > 1000:
-        expired = [k for k, v in _rate_buckets.items()
-                   if all(not v.get(bt) or now - v[bt][-1] > _RATE_WINDOW
-                          for bt in ("voice", "general"))]
-        for k in expired:
-            del _rate_buckets[k]
     with _RATE_LOCK:
+        # 定期清理过期IP桶(防内存泄漏, 在锁内避免竞态)
+        if len(_rate_buckets) > 1000:
+            expired = [k for k, v in _rate_buckets.items()
+                       if all(not v.get(bt) or now - v[bt][-1] > _RATE_WINDOW
+                              for bt in ("voice", "general"))]
+            for k in expired:
+                del _rate_buckets[k]
         if ip not in _rate_buckets:
             _rate_buckets[ip] = {}
         bucket = _rate_buckets[ip].setdefault(bucket_type, [])
@@ -654,6 +657,9 @@ def _drain_notifications() -> list[dict]:
 FEISHU_PUSH_OPEN_ID = os.getenv("FEISHU_PUSH_OPEN_ID", "")
 FEISHU_PUSH_ENABLED = os.getenv("FEISHU_PUSH_ENABLED", "1") == "1" and bool(FEISHU_PUSH_OPEN_ID)
 
+# ntfy 备用通知通道(自托管或 https://ntfy.sh)
+from app.ntfy_push import push_ntfy_async as _push_ntfy_async
+
 def _push_feishu_async(text: str):
     """异步推飞书消息(线程, 不阻塞通知/SSE)。所有主动服务触发时自动推送。"""
     if not FEISHU_PUSH_ENABLED:
@@ -677,7 +683,13 @@ def _push_feishu_async(text: str):
     threading.Thread(target=_send, daemon=True).start()
 
 def _add_notification(text: str, ntype: str = "reminder"):
-    """添加通知到队列+SSE推送+飞书推送"""
+    """添加通知到队列+SSE推送+飞书推送+ntfy备用
+
+    飞书/ntfy 仅推送高价值通知，过滤低价值噪音:
+    - 保留: weather/sleep/away/home/morning/evening/decision/preference
+    - 跳过: wake(对话转录无意义)、health(系统监控Mac可见无需推)
+    """
+    # SSE: 所有类型都推（浏览器能过滤）
     notification = {
         "text": text, "type": ntype,
         "time": datetime.datetime.now().isoformat()
@@ -685,7 +697,18 @@ def _add_notification(text: str, ntype: str = "reminder"):
     _append_notification(notification)
     if sse_client_count():
         _push_notification_to_sse(_sse_event(notification))  # SSE实时推送
-    _push_feishu_async(text)  # 飞书消息推送(异步, 不阻塞)
+
+    # 飞书/ntfy: 仅高价值通知
+    FEISHU_HIGH_VALUE = {"weather", "sleep", "away", "home", "morning", "evening", "decision", "preference"}
+    if ntype in FEISHU_HIGH_VALUE:
+        _push_feishu_async(text)   # 飞书消息推送(异步, 不阻塞)
+        _push_ntfy_async(text)     # ntfy 备用通道(异步, 不阻塞)
+    elif ntype not in ("wake", "health"):
+        # 未知类型默认推（保持向后兼容）
+        _push_feishu_async(text)
+        _push_ntfy_async(text)
+    else:
+        log.debug(f"[notification] 跳过飞书/ntfy推送: [{ntype}] {text[:40]}")
 
 # ===== SSE实时通知推送 =====
 _main_loop = None  # 主线程event loop(启动时捕获)
@@ -709,12 +732,9 @@ def _put_sse_event_nowait(client_q: asyncio.Queue, event_frame: str) -> None:
         unregister_sse_client(client_q)
 
 def _play_reminder_audio(text: str, reminder_id: int | None = None):
-    """生成提醒语音并播放到默认音频输出(AirPods/扬声器)
-    macOS原生用afplay; Linux/容器环境通过SSE推送给浏览器播放"""
+    """生成提醒语音并播放到 ESP32 + 浏览器SSE + macOS afplay(异步)
+    afplay 放到独立线程避免阻塞决策/调度线程"""
     import platform as _platform
-    tmp = None
-    delivery_failed = False
-    delivery_error = ""
     try:
         from voice_agent import tts_to_mp3
         log.info(f"[reminder] TTS生成: {text}")
@@ -722,15 +742,20 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
         if not audio or len(audio) < 100:
             raise RuntimeError("TTS返回空音频")
 
+        # 推送到 ESP32 (xiaozhi WebSocket) — fire and forget
+        _push_tts_to_xiaozhi(text, audio)
+
+        # macOS: afplay 放到独立线程，不阻塞决策循环
         if _platform.system() == "Darwin":
-            # macOS: 用 afplay 直接播放到系统音频设备
             from voice_agent import runtime_temp_audio_path
             tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False, dir=runtime_temp_audio_path())
             tmp.write(audio)
             tmp.close()
             log.info(f"[reminder] 播放提醒语音 {len(audio)}字节(MP3): {text}")
-            subprocess.run(["afplay", tmp.name], timeout=30, capture_output=True)
-            log.info("[reminder] 播放完成")
+            threading.Thread(
+                target=lambda: _afplay_and_cleanup(tmp.name, reminder_id),
+                daemon=True,
+            ).start()
         else:
             # Linux/容器: 通过 SSE 推送音频给所有连接的浏览器客户端
             import base64 as _b64
@@ -738,21 +763,105 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
             _push_notification_to_sse(_sse_event({"type": "audio", "audio": audio_b64, "source": "reminder"}))
             log.info(f"[reminder] 通过SSE推送提醒语音 {len(audio)}字节: {text}")
 
+        # 提醒投递标记在 TTS 生成成功后立即完成（不等 afplay 结束）
         if reminder_id is not None:
             complete_reminder_delivery(reminder_id)
     except Exception as e:
-        delivery_failed = True
-        delivery_error = str(e)
         log.error(f"[reminder] 播放失败: {e}")
         if reminder_id is not None:
-            release_failed_reminder(reminder_id, datetime.datetime.now(), delivery_error)
-    finally:
-        if tmp is not None:
-            try:
-                os.unlink(tmp.name)
-            except FileNotFoundError:
-                pass
+            release_failed_reminder(reminder_id, datetime.datetime.now(), str(e))
 _REMINDER_SCHEDULER_STOP = False
+
+
+def _afplay_and_cleanup(tmp_path: str, reminder_id: int | None = None):
+    """独立线程执行 afplay + 清理临时文件"""
+    try:
+        subprocess.run(["afplay", tmp_path], timeout=30, capture_output=True)
+        log.info("[reminder] 播放完成")
+    except Exception as e:
+        log.debug(f"[reminder] afplay失败: {e}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+
+
+async def _async_push_tts_to_xiaozhi(ws, text: str, mp3_data: bytes):
+    """异步推送 TTS Opus 音频到单个 ESP32 设备"""
+    import json as _json
+    try:
+        from app.xiaozhi_codec import mp3_to_opus_packets
+        loop = asyncio.get_running_loop()
+        packets = await loop.run_in_executor(None, mp3_to_opus_packets, mp3_data)
+        if not packets:
+            log.warning("[xiaozhi-push] Opus编码失败")
+            return
+        await ws.send_text(_json.dumps({"type": "tts", "state": "start"}, ensure_ascii=False))
+        await ws.send_text(_json.dumps({"type": "tts", "state": "sentence_start", "text": text}, ensure_ascii=False))
+        for pkt in packets:
+            await ws.send_bytes(pkt)
+        await ws.send_text(_json.dumps({"type": "tts", "state": "stop"}, ensure_ascii=False))
+        log.info(f"[xiaozhi-push] 推送成功: {text[:30]} ({len(packets)}帧)")
+    except Exception as e:
+        log.warning(f"[xiaozhi-push] 推送失败: {e}")
+
+
+def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
+    """推送 TTS 到所有连接的 ESP32 设备（从同步线程调用）
+    本进程有连接则直推；无连接时入队待flush + 转发HTTPS进程"""
+    from app.state import snapshot_xiaozhi_clients, enqueue_xiaozhi_pending
+
+    # 1. 本进程直推（ESP32 可能连 HTTP 8000）
+    clients = snapshot_xiaozhi_clients()
+    pushed = 0
+    for client_id, info in clients.items():
+        ws = info["ws"]
+        loop = info["loop"]
+        try:
+            asyncio.run_coroutine_threadsafe(
+                _async_push_tts_to_xiaozhi(ws, text, mp3_data), loop)
+            pushed += 1
+        except Exception as e:
+            log.warning(f"[xiaozhi-push] 直推失败 {client_id}: {e}")
+
+    if pushed > 0:
+        log.info(f"[xiaozhi-push] 直推 {pushed} 个设备: {text[:30]}")
+        return
+
+    # 2. 本进程无连接 → 尝试 MQTT 直推 + 入队 + HTTPS 转发
+    # 2a. MQTT 协议端（ESP32 常驻连接时直接推送，秒级响应）
+    try:
+        from app.mqtt_server import push_tts_to_mqtt
+        if push_tts_to_mqtt(text, mp3_data):
+            log.info(f"[xiaozhi-push] MQTT直推成功: {text[:30]}")
+            return
+    except Exception:
+        pass
+
+    # 2b. 入队待 flush（ESP32 下次唤醒时补发）
+    qsize = enqueue_xiaozhi_pending(text, mp3_data)
+    log.info(f"[xiaozhi-push] ESP32未连接，入队({qsize}): {text[:30]}")
+
+    # 3. 同时转发到 HTTPS 进程（ESP32 可能连 8443）
+    try:
+        import base64 as _b64
+        from app.config import https_port
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        _hport = https_port()
+        _lan_ip = _get_lan_ip() or "127.0.0.1"
+        mp3_b64 = _b64.b64encode(mp3_data).decode()
+        r = requests.post(
+            f"https://{_lan_ip}:{_hport}/api/internal/xiaozhi-push",
+            json={"text": text, "mp3": mp3_b64},
+            verify=False, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            if data.get("pushed", 0) > 0:
+                log.info(f"[xiaozhi-push] HTTPS转发成功({data['pushed']}/{data['total']}): {text[:30]}")
+    except Exception as e:
+        log.debug(f"[xiaozhi-push] HTTPS转发失败: {e}")
 
 
 def _reminder_scheduler():
@@ -2074,7 +2183,9 @@ async def xiaozhi_ota(request: Request):
         host = _get_lan_ip() or "127.0.0.1"
     # 端口动态化：跟随 ASSISTANT_KID_HTTP_PORT（不再硬编码 :8000）
     ws_url = f"ws://{host}:{http_port()}/ws/xiaozhi"
-    return JSONResponse({
+
+    # 构建 OTA 响应
+    ota_response = {
         "websocket": {
             "url": ws_url,
             "version": 1,
@@ -2083,7 +2194,32 @@ async def xiaozhi_ota(request: Request):
             "timestamp": int(datetime.datetime.now().timestamp()),
             "timezone_offset": 480,
         }
-    })
+    }
+
+    # 如果配置了 MQTT broker，返回 mqtt 段激活固件 MqttProtocol
+    # 注意：固件 MqttProtocol 不 subscribe，服务器推送无法到达 idle 状态的 ESP32
+    # 当前保留 mqtt 段用于未来固件支持 subscribe 后启用
+    # 现阶段 ESP32 走 WebsocketProtocol + pending queue 补发
+    mqtt_broker = os.getenv("MQTT_BROKER", "")
+    if mqtt_broker and os.getenv("MQTT_ENABLE_OTA", "0") == "1":
+        mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
+        mqtt_user = os.getenv("MQTT_USER", "")
+        mqtt_pass = os.getenv("MQTT_PASSWORD", "")
+        device_id = os.getenv("MQTT_DEVICE_ID", "esp32-default")
+        ota_response["mqtt"] = {
+            "endpoint": f"{mqtt_broker}:{mqtt_port}",
+            "client_id": f"charlie-{device_id}",
+            "publish_topic": f"charlie/esp32/{device_id}/up",
+            "subscribe_topic": f"charlie/esp32/{device_id}/down",
+            "keepalive": 60,
+        }
+        if mqtt_user:
+            ota_response["mqtt"]["username"] = mqtt_user
+        if mqtt_pass:
+            ota_response["mqtt"]["password"] = mqtt_pass
+        log.info(f"[xiaozhi] OTA 返回 MQTT 配置: {mqtt_broker}:{mqtt_port} (device={device_id})")
+
+    return JSONResponse(ota_response)
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
@@ -2569,6 +2705,259 @@ async def decision_status():
                 "history": history,
                 "summary": _dec.decisions_summary(),
             }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/devices")
+async def list_devices():
+    """设备面板：WebSocket客户端 + ESP32 MQTT设备 + 连接统计"""
+    try:
+        from app.state import snapshot_xiaozhi_clients
+        from app.mqtt_server import get_server
+        import time
+
+        # WebSocket xiaozhi 客户端
+        ws_clients = snapshot_xiaozhi_clients()
+        ws_devices = []
+        for cid, info in ws_clients.items():
+            ws_devices.append({
+                "id": cid[:16] + "..." if len(cid) > 16 else cid,
+                "type": "websocket",
+                "connected_at": info.get("connected_at", ""),
+                "device_key": info.get("device_key", ""),
+            })
+
+        # MQTT ESP32 设备
+        mqtt_server = get_server()
+        mqtt_devices = []
+        if mqtt_server:
+            import app.mqtt_server as _mqtt
+            for did, sess in _mqtt._sessions.items():
+                addr = sess.get("addr")
+                mqtt_devices.append({
+                    "id": did,
+                    "type": "mqtt",
+                    "udp_addr": f"{addr[0]}:{addr[1]}" if addr else "waiting...",
+                    "connected_at": sess.get("timestamp", 0),
+                    "since_seconds": round(time.time() - sess.get("timestamp", time.time()), 1),
+                })
+
+        return {
+            "total": len(ws_devices) + len(mqtt_devices),
+            "websocket_count": len(ws_devices),
+            "mqtt_count": len(mqtt_devices),
+            "websocket_devices": ws_devices,
+            "mqtt_devices": mqtt_devices,
+            "mqtt_server_running": mqtt_server is not None,
+            "mqtt_udp_port": mqtt_server.udp_port if mqtt_server else 0,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/decisions/config")
+async def decisions_config():
+    """决策引擎配置：规则列表 + 冷却时间 + 反馈统计"""
+    try:
+        from app import load_magic_module
+        _dec = load_magic_module("magic_decisions", "magic-decisions.py")
+        if not _dec:
+            return {"error": "magic-decisions模块未加载"}
+
+        import os
+        rules = _dec.get_rules()
+        # 提取所有规则ID和优先级
+        rule_summary = []
+        for r in rules:
+            rule_summary.append({
+                "id": r["id"],
+                "priority": r.get("priority", 0),
+                "confirm": r.get("confirm", False),
+                "condition": r.get("condition", {}).get("check_desc", ""),
+            })
+
+        # 反馈统计
+        import json
+        feedback_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "decision_feedback.json")
+        feedback = {}
+        try:
+            with open(feedback_file, "r") as f:
+                feedback = json.load(f)
+        except Exception:
+            pass
+
+        return {
+            "cooldown_hours": 12,
+            "rule_count": len(rule_summary),
+            "rules": rule_summary,
+            "feedback": feedback,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/behaviors")
+async def behaviors_status():
+    """行为模式分析：决策历史时间分布 + 反馈评分 + 活跃时段 + 热门话题"""
+    try:
+        import os, json, time, datetime as _dt
+        from collections import Counter
+
+        # 1. 决策历史 → 时间分布 + 触发频次
+        history = {}
+        try:
+            hf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "decision_history.json")
+            with open(hf, "r") as f:
+                history = json.load(f)
+        except Exception:
+            pass
+        trigger_hours = []
+        trigger_counts = Counter()
+        for rid, info in history.items():
+            if info.get("trigger_time"):
+                try:
+                    t = _dt.datetime.fromisoformat(info["trigger_time"])
+                    trigger_hours.append(t.hour)
+                    trigger_counts[rid] += 1
+                except Exception:
+                    pass
+        hour_dist = dict(Counter(trigger_hours)) if trigger_hours else {}
+        top_triggered = trigger_counts.most_common(5)
+
+        # 2. 反馈评分
+        feedback = {}
+        try:
+            ff = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "decision_feedback.json")
+            with open(ff, "r") as f:
+                feedback = json.load(f)
+        except Exception:
+            pass
+        import app.magic_decisions_test as _mdt
+        rules = _mdt.get_rules() if hasattr(_mdt, 'get_rules') else []
+        feedback_scores = {}
+        for r in rules:
+            rid = r["id"]
+            fb = feedback.get(rid, {"positive": 0, "negative": 0})
+            total = fb["positive"] + fb["negative"]
+            score = fb["positive"] / total if total > 0 else None
+            feedback_scores[rid] = {"score": round(score, 2) if score is not None else None, "total": total}
+
+        # 3. 活跃时段（从对话历史推算）
+        active_hours = {}
+        try:
+            chf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "conversation_history.json")
+            if os.path.exists(chf):
+                with open(chf, "r") as f:
+                    ch = json.load(f)
+                for sid, msgs in (ch if isinstance(ch, dict) else {}).items():
+                    for m in (msgs if isinstance(msgs, list) else []):
+                        if isinstance(m, dict) and m.get("ts"):
+                            try:
+                                h = _dt.datetime.fromtimestamp(float(m["ts"])).hour
+                                slot = f"{h//3*3}-{(h//3+1)*3}点"
+                                active_hours[slot] = active_hours.get(slot, 0) + 1
+                            except Exception:
+                                pass
+        except Exception:
+            pass
+
+        # 4. 习惯数据
+        habits = {}
+        try:
+            hf2 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "habits.json")
+            if os.path.exists(hf2):
+                with open(hf2, "r") as f:
+                    habits_raw = json.load(f)
+                for habit, data in habits_raw.items():
+                    logs = data.get("logs", [])
+                    habits[habit] = {"days": len(logs), "streak": 0}
+                    # 简单连续天数
+                    streak = 0
+                    today = _dt.date.today()
+                    for d_str in sorted(logs, reverse=True)[:30]:
+                        try:
+                            d = _dt.date.fromisoformat(d_str)
+                            if (today - d).days <= streak + 1:
+                                streak += 1
+                            else:
+                                break
+                        except Exception:
+                            break
+                    habits[habit]["streak"] = streak
+        except Exception:
+            pass
+
+        return {
+            "decision_triggers": top_triggered,
+            "hour_distribution": hour_dist,
+            "feedback_scores": feedback_scores,
+            "active_hours": dict(sorted(active_hours.items(), key=lambda x: x[1], reverse=True)),
+            "habits": habits,
+            "total_decisions_triggered": sum(trigger_counts.values()),
+            "total_conversations": sum(1 for s in (history if isinstance(history, dict) else {}).values() for _ in [1]),
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/habits")
+async def habits_status():
+    """习惯追踪数据：打卡记录、连续天数、完成率"""
+    try:
+        import os, json, datetime as _dt
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        habits_file = os.path.join(data_dir, "habits.json")
+        if not os.path.exists(habits_file):
+            return {"total": 0, "habits": {}, "insight": "暂无习惯数据，开始记录吧"}
+
+        with open(habits_file, "r", encoding="utf-8") as f:
+            habits = json.load(f)
+
+        today = _dt.date.today()
+        result = {}
+        for habit, data in habits.items():
+            logs = data.get("logs", [])
+            created = data.get("created", "")
+            # 连续天数
+            streak = 0
+            check = today
+            for d_str in sorted(set(logs), reverse=True):
+                try:
+                    d = _dt.date.fromisoformat(d_str)
+                    if (check - d).days <= streak:
+                        streak += 1
+                    else:
+                        break
+                except Exception:
+                    break
+            # 本周打卡
+            week_start = today - _dt.timedelta(days=today.weekday())
+            week_logs = [d for d in logs if _dt.date.fromisoformat(d) >= week_start] if logs else []
+            # 总打卡天数
+            total_days = len(logs)
+            # 最近一次
+            last_log = sorted(logs)[-1] if logs else None
+
+            result[habit] = {
+                "total_days": total_days,
+                "streak": streak,
+                "week_days": len(week_logs),
+                "week_target": 7,
+                "last_log": last_log,
+                "created": created,
+                "completed_today": today.strftime("%Y-%m-%d") in logs,
+            }
+
+        # 洞察：连续打卡最多的习惯
+        best = max(result.items(), key=lambda x: x[1]["streak"]) if result else (None, {})
+        insight = ""
+        if best[0]:
+            insight = f"🔥 连续打卡最长：{best[0]}（{best[1]['streak']}天）"
+        elif total_days := sum(r["total_days"] for r in result.values()):
+            insight = f"已记录{total_days}次习惯打卡"
+
+        return {"total": len(result), "habits": result, "insight": insight}
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
@@ -3250,6 +3639,56 @@ async def toggle_mcp_server(server_id: str = "", enabled: bool = True):
 
 # Register xiaozhi-compatible WebSocket endpoint
 register_xiaozhi_routes(app)
+
+
+# ===== 内部推送API：跨进程转发 TTS 到 ESP32 =====
+# HTTP进程(8000)跑决策引擎，ESP32连HTTPS进程(8443)。
+# HTTP进程通过 POST /api/internal/xiaozhi-push 转发到HTTPS进程。
+@app.post("/api/internal/xiaozhi-push")
+async def _internal_xiaozhi_push(payload: dict, request: Request):
+    """接收跨进程推送请求，转发TTS到所有已连接的ESP32"""
+    # 内部端点认证：共享密钥或仅允许本机
+    internal_token = os.getenv("INTERNAL_API_TOKEN", "")
+    if internal_token:
+        auth = request.headers.get("X-Internal-Token", "")
+        if auth != internal_token:
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    else:
+        # 无 token 时仅允许本机访问
+        client_ip = request.client.host if request.client else ""
+        if client_ip not in ("127.0.0.1", "::1", "localhost"):
+            return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+    text = payload.get("text", "")
+    mp3_b64 = payload.get("mp3", "")
+    if not text or not mp3_b64:
+        return {"ok": False, "error": "missing text or mp3"}
+    import base64 as _b64
+    from app.state import snapshot_xiaozhi_clients
+    mp3_data = _b64.b64decode(mp3_b64)
+
+    # 1. WebSocket 直推（ESP32 可能连 WS）
+    clients = snapshot_xiaozhi_clients()
+    pushed = 0
+    for cid, info in clients.items():
+        ws = info["ws"]
+        loop = info["loop"]
+        try:
+            await _async_push_tts_to_xiaozhi(ws, text, mp3_data)
+            pushed += 1
+        except Exception as e:
+            log.warning(f"[xiaozhi-push] 内部转发失败 {cid}: {e}")
+
+    # 2. MQTT 直推（ESP32 可能走 MqttProtocol）
+    mqtt_pushed = False
+    try:
+        from app.mqtt_server import push_tts_to_mqtt
+        mqtt_pushed = push_tts_to_mqtt(text, mp3_data)
+        if mqtt_pushed:
+            pushed += 1
+    except Exception:
+        pass
+
+    return {"ok": True, "pushed": pushed, "total": len(clients), "mqtt": mqtt_pushed}
 
 
 if __name__ == "__main__":

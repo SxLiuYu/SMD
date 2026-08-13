@@ -183,3 +183,45 @@ def get_weather_text(city: str = "北京") -> str:
     if src == "open-meteo":
         result += "（天气数据来自 Open-Meteo）"
     return result
+
+
+def get_weather_alerts(city: str = "北京") -> list[str]:
+    """获取天气预警（暴雨/高温/寒潮/大风等）
+
+    使用 Open-Meteo 免费 API 检查极端天气。
+    返回预警文本列表，空列表表示无预警。
+    """
+    alerts = []
+    try:
+        w = get_weather(city)
+        day_temp = w.get("day_temp", 20)
+        night_temp = w.get("night_temp", 20)
+        weather = w.get("weather_text", "")
+        rain = w.get("rain_prob", 0)
+
+        # 高温预警
+        if day_temp >= 35:
+            alerts.append(f"高温预警：今天最高{day_temp}度，尽量减少外出，注意防暑降温")
+        elif day_temp >= 32:
+            alerts.append(f"今天较热，最高{day_temp}度，注意补水防晒")
+
+        # 寒潮预警
+        if day_temp <= 0:
+            alerts.append(f"寒潮预警：今天最高仅{day_temp}度，注意保暖防寒")
+        elif day_temp <= 5:
+            alerts.append(f"今天很冷，最高{day_temp}度，穿厚外套")
+
+        # 暴雨预警
+        if "暴雨" in weather:
+            alerts.append("暴雨预警：今天有暴雨，尽量不要外出，注意关好门窗")
+        elif "大雨" in weather:
+            alerts.append("今天有大雨，出门记得带伞")
+        elif rain and rain >= 80:
+            alerts.append(f"降雨概率{rain}%，很可能下雨，记得带伞")
+
+        # 大风/雪
+        if "雪" in weather and day_temp <= 0:
+            alerts.append("今天有雪且气温低，注意路滑保暖")
+    except Exception as e:
+        log.debug(f"[weather] 预警检查失败: {e}")
+    return alerts

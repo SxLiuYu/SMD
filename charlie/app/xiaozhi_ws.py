@@ -75,7 +75,7 @@ SILENCE_RMS_DEFAULT = 150   # fallback before a noise baseline exists
 # dropped silently so the device never talks on its own. Receiving a valid
 # command refreshes the window, keeping a normal back-and-forth alive.
 # 0 disables the gate.
-ARM_WINDOW = 30.0
+ARM_WINDOW = 30.0  # 对话连续窗口（主动推送由MQTT信令触发，不绑架此值）
 # After a wake (listen/detect) the device's own speaker beep + the wake word
 # itself can momentarily re-trigger our endpointing. Ignore fresh hot frames
 # for this long so the acknowledgement tone and echo settle before the mic
@@ -344,6 +344,27 @@ def register_xiaozhi_routes(app: FastAPI):
         pending_sentences: list[str] = []   # sentences produced so far (replayable)
         resume_played = 0             # how many pending_sentences fully played
         stream_task: Optional[asyncio.Task] = None
+
+        # 注册到全局连接表（主动推送用）+ flush 待推送队列
+        from app.state import register_xiaozhi_client, unregister_xiaozhi_client
+        _loop = asyncio.get_running_loop()
+        _pending = register_xiaozhi_client(session_id, ws, _loop)
+        # flush 暂存的推送
+        if _pending:
+            async def _flush():
+                from app.xiaozhi_codec import mp3_to_opus_packets
+                for item in _pending:
+                    try:
+                        packets = await _loop.run_in_executor(None, mp3_to_opus_packets, item["mp3"])
+                        await ws.send_text(json.dumps({"type": "tts", "state": "start"}))
+                        await ws.send_text(json.dumps({"type": "tts", "state": "sentence_start", "text": item["text"]}))
+                        for pkt in packets:
+                            await ws.send_bytes(pkt)
+                        await ws.send_text(json.dumps({"type": "tts", "state": "stop"}))
+                        log.info(f"[xiaozhi] 补发推送: {item['text'][:30]}")
+                    except Exception as e:
+                        log.warning(f"[xiaozhi] 补发失败: {e}")
+            asyncio.ensure_future(_flush(), loop=_loop)
 
         async def cancel_stream():
             nonlocal stream_task
@@ -687,6 +708,10 @@ def register_xiaozhi_routes(app: FastAPI):
             await send_json({"type": "tts", "state": "stop"})
             log.info("[audio] wake beep played (%d pkts)", len(bkts))
 
+        if opuslib is None:
+            log.error("[xiaozhi] opuslib not available, closing connection")
+            await ws.close(code=1011)
+            return
         decoder = opuslib.Decoder(UPLINK_SAMPLE_RATE, 1)
         _load_silero_vad()  # 预加载 Silero VAD, 避免首帧推理延迟
         tail = deque(maxlen=HEAD_START_FRAMES)  # rolling pre-speech frames
@@ -888,7 +913,7 @@ def register_xiaozhi_routes(app: FastAPI):
                             "frame_duration": OPUS_FRAME_DURATION_MS,
                         },
                     })
-                    log.info("[xiaozhi] hello done, session=%s", session_id)
+                    log.info("[xiaozhi] hello done, session=%s device=%s", session_id, device_key)
 
                 elif mtype == "listen":
                     if state == "detect":
@@ -942,5 +967,6 @@ def register_xiaozhi_routes(app: FastAPI):
             log.error("[xiaozhi] error: %s", e, exc_info=True)
         finally:
             bump_metric("ws_active", -1)
+            unregister_xiaozhi_client(session_id)
             await cancel_stream()
             log.info("[xiaozhi] session %s cleaned up", session_id)
