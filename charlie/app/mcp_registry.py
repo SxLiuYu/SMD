@@ -41,6 +41,7 @@ def _build_all_mcp() -> dict:
         "magic-recipe": {"command": _py, "args": _args("magic-recipe"), "cwd": _mcp_cwd},
         "magic-browser": {"command": _py, "args": _args("magic-browser"), "cwd": _mcp_cwd},
         "magic-jarvis": {"command": _py, "args": _args("magic-jarvis"), "cwd": _mcp_cwd},
+        "magic-habits": {"command": _py, "args": _args("magic-habits"), "cwd": _mcp_cwd},
         "baize-skills": {"command": _py, "args": _args("baize-skills"), "cwd": _mcp_cwd,
                          "env": {"TAVILY_API_KEY": os.getenv("TAVILY_API_KEY", ""),
                                  "ALIYUN_API_KEY": os.getenv("ALIYUN_API_KEY", "")}},

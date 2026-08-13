@@ -38,6 +38,7 @@ OPTIONAL_MCP_KEYS = [
     "magic-recipe",      # 本地菜谱（不需key但归可选）
     "magic-browser",     # ego-browser
     "magic-jarvis",      # 贾维斯能力（金融/环境/体育，免费无Key）
+    "magic-habits",      # 习惯追踪（无key依赖）
     "baize-skills",      # TAVILY/ALIYUN
     "ac-control",        # TUYA_*
 ]
@@ -54,6 +55,7 @@ REQUIRED_ENV = {
     "magic-recipe": [],
     "magic-browser": [],
     "magic-jarvis": [],
+    "magic-habits": [],
     "baize-skills": [],
     "ac-control": ["TUYA_CLIENT_ID", "TUYA_ACCESS_KEY"],
     "amap-maps": [],
