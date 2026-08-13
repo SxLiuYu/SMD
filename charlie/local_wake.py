@@ -78,27 +78,40 @@ _WAKE_WORDS = [
 _is_running = False
 _is_enabled = True  # 可通过 /api/wake/toggle 切换
 _wake_callback = None
-_vosk_model = None
+_oww_model = None
 _detector_thread = None
 
 
-def _load_vosk_model():
-    """加载 Vosk 英文小模型"""
-    global _vosk_model
-    if _vosk_model is not None:
-        return _vosk_model
+def _load_oww_model():
+    """加载 openWakeWord 唤醒词模型（ONNX，低CPU）"""
+    global _oww_model
+    if _oww_model is not None:
+        return _oww_model
     try:
-        from vosk import Model
+        from openwakeword import Model
+        # 使用内置的 "hey jarvis" 或自定义模型
+        # 可以放自定义 .tflite 模型在 web/wake/ 目录
         model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                 "web", "vosk", "vosk-model-small-en-us-0.15")
-        if not os.path.exists(model_path):
-            log.warning(f"[wake] Vosk 模型不存在: {model_path}")
-            return None
-        _vosk_model = Model(model_path)
-        log.info("[wake] Vosk 英文唤醒词模型已加载")
-        return _vosk_model
+                                  "web", "wake")
+        inference_framework = "onnx"
+        if os.path.exists(model_path) and os.listdir(model_path):
+            _oww_model = Model(
+                wakeword_models=[os.path.join(model_path, f)
+                                 for f in os.listdir(model_path)
+                                 if f.endswith(('.tflite', '.onnx'))],
+                inference_framework=inference_framework,
+            )
+            log.info("[wake] openWakeWord 自定义模型已加载: %s", model_path)
+        else:
+            # 使用内置模型 "hey_jarvis"（作为 charlie 的替代）
+            _oww_model = Model(inference_framework=inference_framework)
+            log.info("[wake] openWakeWord 内置模型已加载")
+        return _oww_model
+    except ImportError:
+        log.warning("[wake] openwakeword 未安装，运行 pip install openwakeword")
+        return None
     except Exception as e:
-        log.warning(f"[wake] Vosk 模型加载失败: {e}")
+        log.warning(f"[wake] openWakeWord 加载失败: {e}")
         return None
 
 
@@ -227,28 +240,29 @@ def _record_command() -> bytes | None:
 
 
 def _listen_loop():
-    """持续监听唤醒词的主循环"""
+    """持续监听唤醒词的主循环 — openWakeWord (ONNX, 低CPU)"""
     global _is_running
 
-    model = _load_vosk_model()
+    model = _load_oww_model()
     if model is None:
-        log.warning("[wake] 无 Vosk 模型, 本地唤醒词不可用")
+        log.warning("[wake] 无 openWakeWord 模型, 本地唤醒词不可用")
         return
 
-    from vosk import KaldiRecognizer
     import sounddevice as sd
+    import numpy as np
 
-    rec = KaldiRecognizer(model, RATE)
-    rec.SetWords(False)  # 不需要词级别时间戳, 提高速度
+    # openWakeWord 需要 16kHz, 单声道, int16
+    oww_chunk = 1280  # 80ms at 16kHz
 
-    log.info(f"[wake] 本地唤醒词监听已启动 (wake_words={_WAKE_WORDS})")
+    log.info("[wake] 本地唤醒词监听已启动 (openWakeWord)")
 
     with sd.InputStream(samplerate=RATE, channels=CHANNELS, dtype='int16',
-                        blocksize=CHUNK) as stream:
+                        blocksize=oww_chunk) as stream:
         _is_running = True
+        cooldown_until = 0
         while _is_running:
             try:
-                data, _ = stream.read(CHUNK)
+                data, _ = stream.read(oww_chunk)
                 if data.ndim > 1:
                     data = data[:, 0]
 
@@ -256,22 +270,31 @@ def _listen_loop():
                     time.sleep(0.5)
                     continue
 
-                # Vosk 连续识别
-                if rec.AcceptWaveform(data.tobytes()):
-                    result = json.loads(rec.Result())
-                    text = result.get("text", "").lower().strip()
-                    if text:
-                        for ww in _WAKE_WORDS:
-                            if ww in text:
-                                log.info(f"[wake] 唤醒词: {text}")
-                                _play_beep()
-                                wav = _record_command()
-                                if wav and _wake_callback:
-                                    try:
-                                        _wake_callback(wav)
-                                    except Exception as e:
-                                        log.warning(f"[wake] 回调失败: {e}")
-                                break
+                # 冷却期（避免重复触发）
+                if time.time() < cooldown_until:
+                    continue
+
+                # openWakeWord 预测
+                audio_float = data.astype(np.float32) / 32768.0
+                prediction = model.predict(audio_float)
+
+                # 检查任意唤醒词分数 > 0.5
+                triggered = False
+                for wake_name, score in prediction.items():
+                    if score > 0.5:
+                        log.info(f"[wake] 唤醒词: {wake_name} (score={score:.2f})")
+                        triggered = True
+                        break
+
+                if triggered:
+                    cooldown_until = time.time() + 3  # 3秒冷却
+                    _play_beep()
+                    wav = _record_command()
+                    if wav and _wake_callback:
+                        try:
+                            _wake_callback(wav)
+                        except Exception as e:
+                            log.warning(f"[wake] 回调失败: {e}")
             except Exception as e:
                 log.debug(f"[wake] 监听异常: {e}")
                 time.sleep(0.1)
