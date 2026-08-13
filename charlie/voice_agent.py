@@ -1386,7 +1386,27 @@ def brain_stream_sentences(text: str, session_id: str = "default", interrupted_r
             sent_len = len(full_reply) - len(unsent)
         _record_brain_success()
     except Exception as e:
-        _record_brain_failure(str(e)[:60])
+        _err = str(e)
+        is_429 = '429' in _err or 'Too Many' in _err or '1305' in _err or 'rate' in _err.lower()
+        _record_brain_failure(_err[:60])
+        # 流式 429 且尚未产出内容 → 回退到非流式 _brain_llm（它有 GLM 3 模型轮换 fallback）
+        if is_429 and not full_reply:
+            from app import llm_config as _llm_cfg
+            if _llm_cfg.is_glm_configured() and not _llm_cfg.is_ark_configured():
+                log.warning("[brain] 流式 GLM 429 限流，回退非流式 + 模型轮换")
+                _new_model = _llm_cfg.rotate_glm_model()
+                with _brain_lock:
+                    for _k, _b in list(_brains.items()):
+                        _cleanup_brain_processes(_b)
+                    _brains.clear()
+                    _brain_failures = 0
+                try:
+                    fb = _brain_llm(text, session_id)
+                    if fb and fb != "抱歉，我现在有点忙不过来，请稍等一下再试。":
+                        yield (fb, fb)
+                        return
+                except Exception:
+                    pass
         if not full_reply:
             full_reply = "抱歉，处理时出错了，请稍后再试。"
 

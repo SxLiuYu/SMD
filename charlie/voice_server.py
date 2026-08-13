@@ -3551,6 +3551,7 @@ AVAILABLE_TTS_VOICES = {
 @app.get("/api/tts/voices")
 async def list_tts_voices():
     """列出可用 TTS 音色"""
+    import voice_agent
     current = voice_agent.TTS_VOICE
     voices = []
     for key, desc in AVAILABLE_TTS_VOICES.items():
@@ -3561,6 +3562,7 @@ async def list_tts_voices():
 @app.post("/api/tts/voice")
 async def set_tts_voice(voice_id: str = "Cherry"):
     """切换 TTS 音色"""
+    import voice_agent
     if voice_id not in AVAILABLE_TTS_VOICES:
         return JSONResponse({"error": f"未知音色: {voice_id}"}, status_code=400)
     voice_agent.TTS_VOICE = voice_id
