@@ -146,6 +146,9 @@ async def lifespan(app):
         _start_wake_listener()
         _start_ws_cleanup()
         _warmup_brain()
+        # 启动飞书群聊机器人 (WebSocket 长连接，无需公网URL)
+        from app.feishu_bot import start_feishu_bot
+        start_feishu_bot()
         # 预热本地 ASR (SenseVoice, 避免首次请求加载延迟 ~528ms)
         try:
             from agent.asr_tts import _load_sense_voice
