@@ -24,7 +24,7 @@ def patch_nvs(bin_bytes: bytes, replacements: dict[str, str]) -> bytes:
 
     Args:
         bin_bytes: 固件 bin 的原始字节
-        replacements: {旧值: 新值} 映射，如 {"***REMOVED***": "MyWiFi"}
+        replacements: {旧值: 新值} 映射，如 {"OLD_SSID_PLACEHOLDER": "MyWiFi"}
 
     Returns:
         patch 后的新 bin 字节。新值长度必须 ≤ 旧值（超出 ValueError）。

@@ -10,5 +10,5 @@
 - [ ] NVS 分区偏移从 esptool image_info 或固定偏移（16MB flash 默认 0x9000）获取
 - [ ] 函数签名: patch_nvs(bin_bytes: bytes, ssid: str, password: str, server_ip: str, ws_port: int) -> bytes
 - [ ] 输入测试 bin + 新 WiFi "MyWiFi"/密码"mypassword"，输出 bin 解析含新值
-- [ ] 原始字段值（***REMOVED***/***REMOVED***/192.168.1.3）被正确覆盖
+- [ ] 原始字段值（旧 SSID/密码/服务器地址占位符）被正确覆盖
 - [ ] 不重新编译固件（仅二进制 patch）
