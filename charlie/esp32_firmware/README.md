@@ -1,66 +1,43 @@
-# Charlie ESP32 全屋语音节点
+# Charlie ESP32 固件
 
-## 硬件需求（每个房间一套）
+LC-S3 1.54 寸 TFT WiFi 开发板固件，xiaozhi 协议，MQTT + UDP 音频传输。
 
-| 组件 | 价格 | 说明 |
-|---|---|---|
-| ESP32 开发板 | ~¥20 | 任意ESP32-DevKitC/NodeMCU |
-| INMP441 麦克风模块 | ~¥8 | I2S接口，高灵敏度 |
-| MAX98357 功放模块 | ~¥10 | I2S接口，3W输出 |
-| 小喇叭 3W 4Ω | ~¥5 | 直径3cm，足够语音播放 |
-| **总计** | **~¥43** | 一个房间一套 |
-
-## 接线图
+## 目录结构
 
 ```
-ESP32                  INMP441(麦克风)
-GPIO32  ←──────────── SD
-GPIO25  ←──────────── WS
-GPIO33  ←──────────── SCK
-3.3V    ←──────────── VDD
-GND     ←──────────── GND/L/R
-
-ESP32                  MAX98357(功放+喇叭)
-GPIO26  ────────────→ DIN
-GPIO27  ────────────→ BCLK
-GPIO14  ────────────→ LRC
-5V      ────────────→ VIN
-GND     ────────────→ GND
-                        喇叭+ → 喇叭+
-                        喇叭- → 喇叭-
-
-ESP32
-GPIO0   ──── 按钮 ──── GND（BOOT按钮，用按键短接）
-GPIO2   ──── LED（内置，无需外接）
+esp32_firmware/
+├── README.md                    # 本文件
+└── custom/                      # 自用定制版
+    ├── README.md                # 硬编码 WiFi + MQTT 推送说明
+    ├── build.sh                 # 构建脚本
+    ├── sdkconfig.lc-s3          # 板型配置
+    └── lc-s3-wifi-1.54tft/     # 板型文件
 ```
 
-## 使用流程
+## 固件信息
 
-```
-1. 按住按钮 → LED亮 → 开始说话
-2. 松开按钮 → LED灭 → 发送到Charlie服务器
-3. 服务器处理 → 喇叭播放回复
-4. 播放完毕 → 等待下次按钮
-```
+| 属性 | 值 |
+|------|-----|
+| 板子 | lc-s3-wifi-1.54tft |
+| 芯片 | ESP32-S3 |
+| 屏幕 | ST7789 240x240 SPI |
+| 音频 | ES8311 codec (I2C) + I2S |
+| 协议 | MQTT + UDP（xiaozhi 协议） |
+| 固件源码 | `/Users/sxliuyu/repos/xz/` |
 
-## 部署建议
+## 构建与烧录
 
-```
-客厅   ← ESP32节点1
-卧室   ← ESP32节点2
-书房   ← ESP32节点3
-厨房   ← ESP32节点4
-           │
-      WiFi连接
-           │
-   Charlie服务器 (Mac Mini)
-     192.168.1.3:8000
+```bash
+cd custom
+bash build.sh sync     # 同步配置到 xz 仓库
+bash build.sh build    # 编译固件
+bash build.sh flash    # 烧录到开发板
+bash build.sh all      # 一键完成
 ```
 
-## 烧录方法
+## 相关文档
 
-1. 安装 Arduino IDE
-2. 添加 ESP32 开发板支持
-3. 打开 `esp32_firmware.ino`
-4. 修改 WiFi 配置
-5. 编译并烧录到 ESP32
+- 配网原理：`../../docs/ESP32.md`
+- 固件分发：`../../firmware/README.md`
+- MQTT 服务端：`../app/mqtt_server.py`
+- WebSocket 端点：`../app/xiaozhi_ws.py`
