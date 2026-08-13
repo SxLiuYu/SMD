@@ -43,9 +43,10 @@ _DECISION_RULES = [
         "condition": {
             "states": ["home_awake", "working"],
             "hours": (7, 9),
-            "check_desc": "早上活跃状态",
+            "check_desc": "早上活跃状态，播报早安简报",
+            "extra_check": "morning_briefing_check",
         },
-        "action": {"type": "protocol", "name": "good_morning"},
+        "action": {"type": "tts", "text": ""},
         "confirm": False,
     },
     {
@@ -94,6 +95,18 @@ _DECISION_RULES = [
         "confirm": False,
     },
     {
+        "id": "weather_alert",
+        "priority": 85,
+        "condition": {
+            "states": ["home_awake", "working", "home_resting", "away"],
+            "hours": (0, 24),
+            "check_desc": "极端天气或空气质量预警",
+            "extra_check": "weather_alert_check",
+        },
+        "action": {"type": "tts", "text": ""},
+        "confirm": False,
+    },
+    {
         "id": "meeting_reminder",
         "priority": 75,
         "condition": {
@@ -111,7 +124,8 @@ _DECISION_RULES = [
         "condition": {
             "states": ["home_awake", "working", "home_resting", "unknown"],
             "hours": (9, 24),
-            "check_desc": "长时间无互动，随机问候",
+            "check_desc": "长时间无互动，结合记忆/天气/待办的智能问候",
+            "extra_check": "contextual_greeting_check",
         },
         "action": {"type": "tts", "text": ""},
         "confirm": False,
@@ -348,6 +362,75 @@ def _deadline_check() -> str | None:
     return None
 
 
+# 天气预警去重
+_last_weather_alert = {"text": "", "ts": 0}
+
+
+def _weather_alert_check() -> str | None:
+    """检查极端天气/空气质量预警"""
+    global _last_weather_alert
+    now = time.time()
+    # 同一预警 6 小时内不重复
+    if _last_weather_alert["ts"] and now - _last_weather_alert["ts"] < 21600:
+        return None
+    try:
+        from app.weather import get_weather_alerts
+        alerts = get_weather_alerts()
+        if alerts:
+            _last_weather_alert = {"text": alerts[0], "ts": now}
+            return alerts[0]
+    except Exception as e:
+        log.debug(f"[decision] weather_alert_check 异常: {e}")
+    return None
+
+
+def _morning_briefing_check() -> str | None:
+    """早安简报：天气+日程+待办+新闻"""
+    try:
+        from app.briefing import morning_briefing
+        text = morning_briefing()
+        if text and len(text) > 10:
+            return text
+    except Exception as e:
+        log.debug(f"[decision] morning_briefing_check 异常: {e}")
+    return None
+
+
+def _contextual_greeting_check() -> str | None:
+    """上下文感知问候：结合天气/待办/记忆生成一句话"""
+    try:
+        parts = []
+
+        # 天气变化提醒
+        try:
+            from app.weather import get_weather_text
+            w = get_weather_text()
+            if w and ("雨" in w or "雪" in w):
+                parts.append(f"外面{w}，记得带伞")
+        except Exception:
+            pass
+
+        # 待办提醒
+        try:
+            from app.reminders import list_reminders
+            today = time.strftime("%Y-%m-%d")
+            due = [r for r in list_reminders(include_completed=False)
+                   if not r.get("completed") and r.get("due_date", "") <= today]
+            if due:
+                parts.append(f"你还有{len(due)}项待办没完成")
+        except Exception:
+            pass
+
+        if parts:
+            return "，".join(parts) + "。"
+
+        # 没有特殊上下文时返回 None，让 casual_checkin 走随机问候
+        return None
+    except Exception as e:
+        log.debug(f"[decision] contextual_greeting_check 异常: {e}")
+        return None
+
+
 # ===== 核心评估 =====
 
 def evaluate(user_state: dict, protocol_executor=None) -> list:
@@ -416,6 +499,38 @@ def evaluate(user_state: dict, protocol_executor=None) -> list:
             rule = dict(rule)
             rule["action"] = dict(rule["action"])
             rule["action"]["text"] = f"提醒：{deadline}，记得检查进度。"
+        if cond.get("extra_check") == "weather_alert_check":
+            alert = _weather_alert_check()
+            if not alert:
+                continue
+            rule = dict(rule)
+            rule["action"] = dict(rule["action"])
+            rule["action"]["text"] = alert
+        if cond.get("extra_check") == "morning_briefing_check":
+            briefing = _morning_briefing_check()
+            if briefing:
+                rule = dict(rule)
+                rule["action"] = dict(rule["action"])
+                rule["action"]["text"] = briefing
+            else:
+                continue
+        if cond.get("extra_check") == "contextual_greeting_check":
+            greeting = _contextual_greeting_check()
+            if greeting:
+                rule = dict(rule)
+                rule["action"] = dict(rule["action"])
+                rule["action"]["text"] = greeting
+            else:
+                # 无特殊上下文，用随机问候
+                greetings = [
+                    "好久不见，最近怎么样？",
+                    "在忙什么呢？",
+                    "有什么我能帮你的吗？",
+                    "休息一下吧，别太累了。",
+                ]
+                rule = dict(rule)
+                rule["action"] = dict(rule["action"])
+                rule["action"]["text"] = _rand.choice(greetings)
         if cond.get("extra_check") == "calendar_check":
             event = _calendar_check()
             if not event:
