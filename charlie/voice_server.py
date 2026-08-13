@@ -683,7 +683,13 @@ def _push_feishu_async(text: str):
     threading.Thread(target=_send, daemon=True).start()
 
 def _add_notification(text: str, ntype: str = "reminder"):
-    """添加通知到队列+SSE推送+飞书推送+ntfy备用"""
+    """添加通知到队列+SSE推送+飞书推送+ntfy备用
+
+    飞书/ntfy 仅推送高价值通知，过滤低价值噪音:
+    - 保留: weather/sleep/away/home/morning/evening/decision/preference
+    - 跳过: wake(对话转录无意义)、health(系统监控Mac可见无需推)
+    """
+    # SSE: 所有类型都推（浏览器能过滤）
     notification = {
         "text": text, "type": ntype,
         "time": datetime.datetime.now().isoformat()
@@ -691,8 +697,18 @@ def _add_notification(text: str, ntype: str = "reminder"):
     _append_notification(notification)
     if sse_client_count():
         _push_notification_to_sse(_sse_event(notification))  # SSE实时推送
-    _push_feishu_async(text)  # 飞书消息推送(异步, 不阻塞)
-    _push_ntfy_async(text)  # ntfy 备用通道(异步, 不阻塞)
+
+    # 飞书/ntfy: 仅高价值通知
+    FEISHU_HIGH_VALUE = {"weather", "sleep", "away", "home", "morning", "evening", "decision", "preference"}
+    if ntype in FEISHU_HIGH_VALUE:
+        _push_feishu_async(text)   # 飞书消息推送(异步, 不阻塞)
+        _push_ntfy_async(text)     # ntfy 备用通道(异步, 不阻塞)
+    elif ntype not in ("wake", "health"):
+        # 未知类型默认推（保持向后兼容）
+        _push_feishu_async(text)
+        _push_ntfy_async(text)
+    else:
+        log.debug(f"[notification] 跳过飞书/ntfy推送: [{ntype}] {text[:40]}")
 
 # ===== SSE实时通知推送 =====
 _main_loop = None  # 主线程event loop(启动时捕获)
