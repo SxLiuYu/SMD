@@ -58,3 +58,6 @@ charlie/build/
 charlie/.env
 charlie/.baidu_token.json
 assistant-kid/
+
+# 运行时缓存
+charlie/.baidu_token*.json

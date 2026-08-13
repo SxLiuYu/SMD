@@ -1067,8 +1067,14 @@ def _brain_llm(text: str, session_id: str = "default") -> str:
 
     # Demo 规则模式拦截
     if _demo_mode_active() and not _ollama_online():
-        reply = ("Demo 模式能力有限，我处理不了这个请求。"
-                 "请配置 ARK_KEY 解锁完整能力：http://localhost:8000/setup")
+        _port = 8000
+        try:
+            from app.config import http_port as _hp
+            _port = _hp()
+        except Exception:
+            pass
+        reply = (f"Demo 模式能力有限，我处理不了这个请求。"
+                 f"请配置 ARK_KEY 或 GLM_KEY 解锁完整能力：http://localhost:{_port}/welcome")
         _append_history(_get_history(session_id), text, reply)
         return reply
 

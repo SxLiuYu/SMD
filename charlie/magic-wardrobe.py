@@ -17,7 +17,8 @@ log = logging.getLogger("magic")
 
 mcp = FastMCP("magic-wardrobe")
 
-WARDROBE_DIR = "/Users/sxliuyu/wardrobe"
+WARDROBE_DIR = os.environ.get("CHARLIE_WARDROBE_DIR") or os.path.join(
+    os.environ.get("ASSISTANT_KID_DATA_DIR") or os.path.expanduser("~"), "charlie", "wardrobe")
 DATA_DIR = os.path.join(WARDROBE_DIR, "data")
 WARDROBE_FILE = os.path.join(DATA_DIR, "wardrobe.json")
 os.makedirs(DATA_DIR, exist_ok=True)

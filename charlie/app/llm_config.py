@@ -112,11 +112,13 @@ def resolve() -> dict:
     if is_glm_configured():
         _m = current_glm_model()
         log.info(f"[llm] ━━━ 免费 LLM ━━━ 智谱 {_m}")
-        # 智谱非 Qwen 推理服务器，去掉 enable_thinking 以免 400
+        # 关闭思考(thinking):glm-4.5/4.7-flash 是推理模型,返回 reasoning_content
+        # 会导致 Qwen-Agent 取不到 content。thinking:disabled 让其只返回纯 content。
         return {
             'model': _m, 'model_type': 'oai',
             'api_base': GLM_BASE, 'api_key': GLM_KEY,
-            'generate_cfg': {'use_raw_api': True, 'max_tokens': 512},
+            'generate_cfg': {'use_raw_api': True, 'max_tokens': 512,
+                             'extra_body': {'thinking': {'type': 'disabled'}}},
         }
     # Demo 模式：Ollama 兜底
     if not ollama_online():

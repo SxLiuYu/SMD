@@ -314,7 +314,7 @@ def _asr_baidu(audio_bytes: bytes, fmt: str = "mp3") -> str:
     payload = {
         "format": fmt, "rate": 16000, "channel": 1,
         "token": str(token),
-        "cuid": "charlie-mac",
+        "cuid": "charlie",
         "dev_pid": 1537,
         "speech": speech_b64, "len": speech_len,
     }
@@ -360,7 +360,7 @@ def _tts_baidu(text: str) -> bytes:
     r = _session.post(url, data={
         "tex": text,
         "tok": token,
-        "cuid": "charlie-mac",
+        "cuid": "charlie",
         "ctp": 1,
         "lan": "zh",
         "spd": 5,

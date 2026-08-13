@@ -7,6 +7,20 @@ import os, sys, subprocess, re, tempfile, time, struct, wave, signal, threading
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 from voice_agent import DATA_DIR, voice_loop, write_audio_file
 
+
+def _play_audio(path: str):
+    """跨平台音频播放（macOS afplay / Windows winsound / Linux aplay）"""
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif os.name == "nt":
+            import winsound
+            winsound.PlaySound(path, winsound.SND_FILENAME)
+        else:
+            subprocess.run(["aplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+
 # ── 配置 ──────────────────────────────────────────────
 SAMPLE_RATE = 16000
 CHANNELS = 1
@@ -189,7 +203,7 @@ def main():
             if audio and len(audio) > 100:
                 reply_path = os.path.join(DATA_DIR, "cli_reply.wav")
                 write_audio_file(reply_path, audio)
-                subprocess.run(["afplay", reply_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                _play_audio(reply_path)
             else:
                 print("(语音合成失败，仅显示文字)")
         except Exception as e:

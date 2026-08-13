@@ -4,17 +4,22 @@
 """
 import shutil
 import logging
+import platform as _platform
 
 log = logging.getLogger("magic")
 
-# 检测的外部二进制 + 安装指引
+_IS_WIN = _platform.system() == "Windows"
+
+# 检测的外部二进制 + 安装指引（跨平台）
 _EXTERNAL_BINARIES = {
     "ffmpeg": {
-        "install": "brew install ffmpeg (macOS) / apt install ffmpeg (Linux)",
+        "install": ("winget install ffmpeg (Windows) / brew install ffmpeg (macOS) / apt install ffmpeg (Linux)"
+                    if _IS_WIN else "brew install ffmpeg (macOS) / apt install ffmpeg (Linux)"),
         "purpose": "音频转码（ASR/TTS 必需）",
     },
     "ollama": {
-        "install": "brew install ollama (macOS) / curl -fsSL https://ollama.com/install.sh | sh",
+        "install": ("winget install Ollama.Ollama (Windows) / brew install ollama (macOS) / curl -fsSL https://ollama.com/install.sh | sh"
+                    if _IS_WIN else "brew install ollama (macOS) / curl -fsSL https://ollama.com/install.sh | sh"),
         "purpose": "Demo 模式本地 LLM（可选，未配 ARK_KEY 时用）",
     },
     "ncm": {

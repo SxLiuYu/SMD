@@ -72,11 +72,13 @@ def _get_arp_table() -> dict:
 
 
 def _ping_device(ip: str, timeout: int = 3) -> bool:
-    """ping 检测 IP 是否可达"""
+    """ping 检测 IP 是否可达（跨平台参数）"""
     try:
-        result = subprocess.run(
-            ['ping', '-c', '1', '-W', str(timeout), ip],
-            capture_output=True, timeout=timeout + 5)
+        if os.name == 'nt':  # Windows: -n 次数, -w 毫秒
+            cmd = ['ping', '-n', '1', '-w', str(timeout * 1000), ip]
+        else:                # Unix: -c 次数, -W 秒
+            cmd = ['ping', '-c', '1', '-W', str(timeout), ip]
+        result = subprocess.run(cmd, capture_output=True, timeout=timeout + 5)
         return result.returncode == 0
     except Exception:
         return False

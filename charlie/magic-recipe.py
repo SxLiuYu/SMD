@@ -23,8 +23,9 @@ except ImportError: pass
 
 mcp = FastMCP("magic-recipe")
 
-# ── 数据路径(recipe-app 目录) ──
-RECIPE_DIR = "/Users/sxliuyu/recipe-app"
+# ── 数据路径(用户数据目录，跨平台可写) ──
+RECIPE_DIR = os.environ.get("CHARLIE_RECIPE_DIR") or os.path.join(
+    os.environ.get("ASSISTANT_KID_DATA_DIR") or os.path.expanduser("~"), "charlie", "recipe-app")
 DATA_DIR = os.path.join(RECIPE_DIR, "data")
 RECIPE_FILE = os.path.join(DATA_DIR, "recipes.json")
 PROFILE_FILE = os.path.join(DATA_DIR, "wife_profile.json")

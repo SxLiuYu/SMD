@@ -51,6 +51,9 @@ hidden_imports = [
     # 其他
     'psutil', 'dotenv', 'tiktoken', 'jieba', 'pytz',
     'numpy',
+    # 原生桌面窗口 (pywebview + WebView2)
+    'webview', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
+    'clr', 'pythonnet',
 ]
 
 # 收集数据文件 (前端HTML, 模板, 配置)
@@ -81,7 +84,7 @@ datas = [
 ]
 
 # 收集隐式依赖的包数据
-for pkg in ['qwen_agent', 'mcp', 'fastapi', 'starlette', 'uvicorn', 'sse_starlette']:
+for pkg in ['qwen_agent', 'mcp', 'fastapi', 'starlette', 'uvicorn', 'sse_starlette', 'webview', 'pythonnet']:
     pkg_data = collect_data_files(pkg)
     datas.extend(pkg_data)
     hidden_imports.extend(collect_submodules(pkg))
@@ -174,7 +177,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,  # 保留控制台窗口 (显示启动日志)
+    console=False,  # 原生桌面窗口模式（不弹控制台黑框）
     disable_windowed_traceback=False,
     target_architecture=None,
     codesign_identity=None,

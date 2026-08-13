@@ -90,7 +90,17 @@ def commit_recording(proc, min_size=2500):
             pass
 
 def play(path):
-    subprocess.run(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    """跨平台音频播放（macOS afplay / Windows winsound / Linux aplay）"""
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(["afplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif os.name == "nt":
+            import winsound
+            winsound.PlaySound(path, winsound.SND_FILENAME)
+        else:
+            subprocess.run(["aplay", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 def main():
     dev, name = find_airpods()
@@ -98,7 +108,7 @@ def main():
     print("  Charlie · 交互式语音对话")
     print("="*46)
     print(f"🎤 麦克风: [{dev}] {name}")
-    print(f"🧠 大脑: deepseek-v4-flash + MCP")
+    print(f"🧠 大脑: ARK/GLM + MCP")
     print("操作: 按回车开始说话 → 说完按回车停止 → 白泽回答")
     print("退出: Ctrl+C\n")
     while True:

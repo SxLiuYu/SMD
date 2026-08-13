@@ -13,33 +13,27 @@ Charlie 语音助手 — PyInstaller 入口点
 import sys
 import os
 import shutil
-import webbrowser
+import logging
+
+log = logging.getLogger("magic")
 
 
-def _ensure_first_run(base_dir: str) -> bool:
-    """首次启动检测：缺 .env 则从 .env.example 复制 + 开浏览器到 /welcome
+def _ensure_first_run(base_dir: str) -> str:
+    """首次启动检测：缺 .env 则从 .env.example 复制。
 
-    返回 True 表示是首次运行（已打开引导页），False 表示已配置。
+    返回首启目标路径（首次="/welcome"，已配置="/"）。
     """
     env_path = os.path.join(base_dir, ".env")
-    if os.path.exists(env_path):
-        return False
-    # 从 .env.example 复制空白模板
-    example = os.path.join(base_dir, ".env.example")
-    if os.path.exists(example):
-        shutil.copy(example, env_path)
-    else:
-        with open(env_path, "w", encoding="utf-8") as f:
-            f.write("# Charlie 语音助手配置\n# 请访问 http://localhost:8000/setup 填写\n")
-    # 开浏览器到 /welcome 引导页
-    port = 8000
-    try:
-        from app.config import http_port
-        port = http_port()
-    except Exception:
-        pass
-    webbrowser.open(f"http://localhost:{port}/welcome")
-    return True
+    first_run = not os.path.exists(env_path)
+    if first_run:
+        # 从 .env.example 复制空白模板
+        example = os.path.join(base_dir, ".env.example")
+        if os.path.exists(example):
+            shutil.copy(example, env_path)
+        else:
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.write("# Charlie 语音助手配置\n# 请在应用内 /welcome 引导页配置\n")
+    return "/welcome" if first_run else "/"
 
 
 def _run_preflight():
@@ -48,10 +42,11 @@ def _run_preflight():
         from app.preflight import run_preflight
         run_preflight()
     except Exception as e:
-        print(f"[preflight] 检测跳过: {e}", file=sys.stderr)
+        log.warning(f"[preflight] 检测跳过: {e}")
 
 
 def main():
+    _first_path = "/"  # 默认进首页；frozen 模式首启会被覆盖为 /welcome
     # 确保工作目录是可执行文件所在目录
     if getattr(sys, 'frozen', False):
         _base = os.path.dirname(sys.executable)
@@ -68,7 +63,7 @@ def main():
                 with open(p, 'w') as fh:
                     fh.write('[]')
         # T9: 首次启动检测 + preflight
-        _ensure_first_run(_base)
+        _first_path = _ensure_first_run(_base)
         _run_preflight()
 
     # MCP 子进程模式: 启动指定的 MCP server
@@ -77,8 +72,8 @@ def main():
         _run_mcp_server(mcp_name)
         return
 
-    # 主服务模式: 启动 voice_server
-    _run_server()
+    # 主服务模式: 启动 voice_server + 原生窗口
+    _run_server(_first_path)
 
 def _run_mcp_server(name: str):
     """启动 MCP 子进程 (magic-* / baize-skills / ...)"""
@@ -102,7 +97,7 @@ def _run_mcp_server(name: str):
     }
     filename = mcp_files.get(name)
     if not filename:
-        print(f"未知 MCP: {name}", file=sys.stderr)
+        log.error(f"未知 MCP: {name}")
         sys.exit(1)
     # 按文件路径加载 (PyInstaller frozen 模式下 __file__ 在 _MEIPASS)
     if getattr(sys, 'frozen', False):
@@ -114,7 +109,7 @@ def _run_mcp_server(name: str):
         # 尝试直接从源码目录
         filepath = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
     if not os.path.exists(filepath):
-        print(f"MCP {name} 文件不存在: {filepath}", file=sys.stderr)
+        log.error(f"MCP {name} 文件不存在: {filepath}")
         sys.exit(1)
     try:
         mod_name = name.replace('-', '_') + '_mcp'
@@ -123,15 +118,64 @@ def _run_mcp_server(name: str):
         spec.loader.exec_module(mod)
         mod.mcp.run()
     except Exception as e:
-        print(f"MCP {name} 启动失败: {e}", file=sys.stderr)
+        log.error(f"MCP {name} 启动失败: {e}")
         sys.exit(1)
 
-def _run_server():
-    """启动 voice_server (FastAPI + Uvicorn)"""
+def _run_server(first_path: str = "/"):
+    """启动 voice_server (FastAPI+Uvicorn, 后台线程) + 原生桌面窗口 (pywebview/WebView2)
+
+    双击 charlie.exe → 弹原生窗口内嵌 Web UI，不再开浏览器、不弹控制台。
+    窗口关闭即退出。
+    """
+    import threading, time, socket
     import uvicorn
     from voice_server import app
     from app.config import http_port
-    uvicorn.run(app, host="0.0.0.0", port=http_port(), log_level="info")
+    port = http_port()
+    # 后台线程跑 Uvicorn（host 0.0.0.0 保留局域网/ESP32 接入能力）
+    config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="warning")
+    server = uvicorn.Server(config)
+    _srv_thread = threading.Thread(target=server.run, daemon=True)
+    _srv_thread.start()
+    # 等端口就绪（最多 ~10s）；超时则报错退出，避免带死 URL 进窗口
+    _ready = False
+    for _ in range(50):
+        try:
+            with socket.create_connection(("127.0.0.1", port), 0.2):
+                _ready = True
+                break
+        except OSError:
+            time.sleep(0.2)
+    if not _ready:
+        log.error(f"[gui] voice_server 未在 10s 内就绪(端口 {port})，退出")
+        try:
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(0, f"Charlie 服务启动失败（端口 {port} 被占或依赖缺失），详情见 logs/app.log", "Charlie 启动失败", 0x10)
+        except Exception:
+            pass
+        sys.exit(1)
+    url = f"http://127.0.0.1:{port}{first_path}"
+    log.info(f"[gui] 启动原生窗口: {url}")
+    try:
+        import webview
+        webview.create_window("Charlie 语音助手", url,
+                              width=440, height=760,
+                              min_size=(360, 600),
+                              text_select=False)
+        webview.start()  # 阻塞主线程，窗口关闭后返回
+    except Exception as e:
+        # 退路：pywebview/WebView2 不可用时回退到系统浏览器
+        log.warning(f"[gui] pywebview 不可用({e})，回退浏览器")
+        import webbrowser
+        webbrowser.open(url)
+        try:
+            _srv_thread.join()
+        except (KeyboardInterrupt, SystemExit):
+            pass
+        return
+    # 优雅关闭：通知 uvicorn 退出，等调度器收尾
+    server.should_exit = True
+    _srv_thread.join(timeout=3)
 
 if __name__ == "__main__":
     main()

@@ -2,6 +2,7 @@
 import os
 import datetime
 import logging
+import platform as _platform
 from typing import Any
 
 log = logging.getLogger("magic")
@@ -134,8 +135,11 @@ def _build_system_msg(mcp_set: str = "none") -> str:
     from agent.preferences import list_preferences
     from agent.history import _context_summaries
     now = datetime.datetime.now()
+    # 设备描述按实际平台动态生成，避免在 Windows 上误称 Mac Mini
+    _sys = _platform.system()
+    _device = "Windows" if _sys == "Windows" else ("Mac" if _sys == "Darwin" else "本机")
     result = (
-        "你是Charlie，一个在Mac Mini上运行的私人AI助理。\n"
+        f"你是Charlie，一个在{_device}上运行的私人AI助理。\n"
         "你不是仆人，你是搭档。你说话像朋友——直接、偶尔幽默、不废话。\n"
         "你会主动提醒重要的事，也会在用户犹豫时给出建议。\n"
         "你觉得用户的需求有问题时会说出来，不会盲目执行。\n"
@@ -152,10 +156,17 @@ def _build_system_msg(mcp_set: str = "none") -> str:
     )
     # ===== Demo 模式横幅 =====
     _ark_key = (os.getenv("ARK_KEY") or "").strip()
-    if not _ark_key or _ark_key.startswith("你的"):
+    _glm_key = (os.getenv("GLM_KEY") or "").strip()
+    if (not _ark_key or _ark_key.startswith("你的")) and (not _glm_key or _glm_key.startswith("你的")):
+        _port = 8000
+        try:
+            from app.config import http_port as _hp
+            _port = _hp()
+        except Exception:
+            pass
         result += (
-            "\n\n⚠️ 当前运行在 Demo 模式（本地 Ollama 模型，未配置 ARK_KEY）。"
-            "能力有限，建议在 http://localhost:8000/setup 配置 ARK 密钥以获得完整能力。"
+            "\n\n⚠️ 当前运行在 Demo 模式（本地 Ollama 模型，未配置 ARK_KEY/GLM_KEY）。"
+            f"能力有限，建议在 http://localhost:{_port}/welcome 配置免费 GLM 密钥以获得完整能力。"
         )
     result += f"\n当前时间：{now.strftime('%Y年%m月%d日 %H:%M')}。"
     try:

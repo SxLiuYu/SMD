@@ -5,15 +5,17 @@
 
 不重新编译固件，仅 patch 同一份 bin（符合 RTK.md 约束）。
 """
+import os
 import logging
 
 log = logging.getLogger("magic")
 
-# 固件里硬编码的默认值（RTK.md 记录）
+# 固件里 baked 的默认值（旧固件刷机前替换值用；新分发版用户自行在引导页填）
+# 旧版本的明文凭证已移除，改为从环境变量读取，避免凭证泄漏
 DEFAULT_OLD_VALUES = {
-    "ssid": "***REMOVED***",
-    "password": "***REMOVED***",
-    "server_ip": "192.168.1.3",
+    "ssid": os.environ.get("CHARLIE_NVS_OLD_SSID", ""),
+    "password": os.environ.get("CHARLIE_NVS_OLD_PASSWORD", ""),
+    "server_ip": os.environ.get("CHARLIE_NVS_OLD_SERVER_IP", ""),
 }
 
 
