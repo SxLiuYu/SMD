@@ -7,7 +7,8 @@
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
 [![ESP32](https://img.shields.io/badge/ESP32-LC--S3-orange.svg)](#-esp32-开发板终端)
-[![PyInstaller](https://img.shields.io/badge/Distribution-macOS%20%7C%20Linux%20%7C%20Windows-red.svg)](#-快速上手5-分钟)
+[![PyInstaller](https://img.shields.io/badge/Distribution-Windows%20%7C%20macOS%20%7C%20Linux-red.svg)](#-快速上手5-分钟)
+[![Release](https://img.shields.io/github/v/release/SxLiuYu/charlie-voice-assistant)](https://github.com/SxLiuYu/charlie-voice-assistant/releases/latest)
 
 ---
 
@@ -55,18 +56,14 @@ Charlie 是一个**低成本全屋智能家居方案**：一块 ESP32 开发板�
 
 ## 🚀 快速上手（5 分钟）
 
-### 方式一：桌面应用（推荐普通用户）
+### 方式一：Windows 便携版（推荐普通用户）
 
-```bash
-# 1. 下载桌面包（~200MB）
-#    见 release 页面：https://github.com/SxLiuYu/charlie-voice-assistant/releases
-# 2. 解压双击启动
-# 3. 浏览器自动打开 http://localhost:8000/welcome
-# 4. 引导页填百度语音 Key + 智谱 GLM 免费 Key（或选 Demo 模式跳过）
-# 5. 说「几点了」✅
-```
+1. 到 [Release 页面](https://github.com/SxLiuYu/charlie-voice-assistant/releases/latest) 下载 **`Charlie-Portable.zip`**
+2. 解压到任意目录，双击 **`charlie.exe`**（原生桌面窗口，不弹黑框，无需装 Python）
+3. 首次启动自动打开欢迎向导：申请一个免费的智谱 GLM Key 填入即可对话（[注册即送，glm-4.7-flash 永久免费](https://open.bigmodel.cn)）
+4. 保存即时生效，无需重启。语音对话可再填百度语音 Key（有免费额度），不填也能用文字
 
-> macOS 首次运行提示"无法验证开发者"：系统设置 → 隐私与安全性 → 仍要打开。
+> Windows 10/11 需 WebView2（多数系统已自带）。解压后整个文件夹可拷到 U 盘，数据/配置都在文件夹内。
 
 ### 方式二：Python 开发（面向开发者）
 
@@ -74,12 +71,12 @@ Charlie 是一个**低成本全屋智能家居方案**：一块 ESP32 开发板�
 git clone https://github.com/SxLiuYu/charlie-voice-assistant.git
 cd charlie-voice-assistant/charlie
 
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-core.txt
-brew install ffmpeg              # macOS；Linux 用 apt install ffmpeg
+# macOS: brew install ffmpeg   Linux: apt install ffmpeg   Windows: winget install ffmpeg
 
 cp .env.example .env             # 可选，Demo 模式直接可用
-python3 voice_server.py          # 浏览器打开 http://localhost:8000
+python voice_server.py           # 浏览器打开 http://localhost:8000
 ```
 
 ### 方式三：Docker
@@ -96,9 +93,11 @@ docker compose up -d
 Charlie 支持 ESP32 LC-S3 1.54 寸 TFT WiFi 开发板（xiaozhi 协议），做成独立的语音对话终端放在家里任意房间。
 
 - **型号**：`lc-s3-wifi-1.54tft`（LC-S3 + 1.54寸圆形 TFT，~30元）
-- **固件**：xiaozhi v2.1.0，16MB flash，ST7789 240×240
-- **烧录**：网页向导，插 USB → 检测串口 → 填 WiFi → 一键烧录，无需编译
+- **固件**：xiaozhi v2.1.0，16MB flash，ST7789 240×240（分发固件已擦除 NVS，不含任何 WiFi 信息）
+- **烧录+配网**：应用向导一键烧录干净固件，之后**手机连设备热点**（`http://192.168.4.1`）填写 WiFi 和 Charlie 的 OTA 地址，无需编译、无字段长度限制
 - **性能**：说完 → 首句约 1.16s（ASR+LLM+TTS 全链路）
+
+详见 [docs/ESP32.md](docs/ESP32.md)。
 
 ---
 
@@ -161,7 +160,7 @@ ESP32 开发板 (xiaozhi WS)  ←─WiFi─→  浏览器 (HTTPS/SSE)
               ├── TTS: 百度 / Finna降级
               ├── MCP工具: 空调/场景/提醒/飞书/搜索...（19个）
               ├── 决策引擎: 状态感知+时间触发，自主推送
-              └── ESP32: NVS固件patch + OTA + WebSocket
+              └── ESP32: 干净固件 + AP热点配网 + OTA + WebSocket
 ```
 
 **核心模块**：
@@ -176,7 +175,7 @@ ESP32 开发板 (xiaozhi WS)  ←─WiFi─→  浏览器 (HTTPS/SSE)
 | 决策引擎 | `magic-decisions.py` | 状态感知自主推送，机器级锁防重 |
 | 提醒持久化 | `app/reminders.py` | 文件锁 + 去重 + 投递重试 |
 | 证书生成 | `app/cert.py` | HTTPS 自签证书自动化 |
-| NVS Patch | `app/nvs_patch.py` | ESP32 固件 WiFi/地址动态替换 |
+| ESP32 烧录 | `voice_server.py` | 进程内 esptool 烧录干净固件 + AP 热点配网指引 |
 
 ---
 

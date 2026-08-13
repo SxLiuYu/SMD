@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] mock LLM 不可用（ARK_KEY 空 + Ollama 离线），输入"几点了"返回含当前时间的文本
-- [ ] mock LLM 不可用，输入"晚安"触发 goodnight 场景步骤
-- [ ] mock LLM 不可用，输入无法命中的内容（如"今天天气"），返回固定提示串引导配置 key
-- [ ] system_msg 在 Demo 模式下加横幅"能力有限，配置 key 解锁完整能力"
-- [ ] 现有 51 个测试不破坏
+- [x] mock LLM 不可用（ARK_KEY 空 + Ollama 离线），输入"几点了"返回含当前时间的文本
+- [x] mock LLM 不可用，输入"晚安"触发 goodnight 场景步骤
+- [x] mock LLM 不可用，输入无法命中的内容（如"今天天气"），返回固定提示串引导配置 key
+- [x] system_msg 在 Demo 模式下加横幅"能力有限，配置 key 解锁完整能力"
+- [x] 现有 51 个测试不破坏

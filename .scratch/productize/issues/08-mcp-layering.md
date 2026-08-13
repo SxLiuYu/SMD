@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] voice_agent all_mcp 拆成 CORE_MCP（8个：时间/天气/记忆/提醒/系统/翻译/计算/搜索/备忘录）+ OPTIONAL_MCP（11个）
-- [ ] 读 MCP_PROFILE 环境变量：core/all/custom
-- [ ] Demo 模式（_demo_mode_active()）时强制 mcp_set="none"
-- [ ] 新建 app/mcp_gate.py：每个可选 MCP 声明 required_env，启动前过滤 key 缺失的
-- [ ] _build_brain 拿过滤后的 enabled_mcp 列表传给 qwen-agent
-- [ ] MCP_PROFILE=core 启动日志显示 8 个 MCP
-- [ ] Demo 模式启动日志显示 0 个 MCP
-- [ ] 飞书 MCP 缺 FEISHU_APP_ID 时自动跳过 + warning
+- [x] voice_agent all_mcp 拆成 CORE_MCP（8个：时间/天气/记忆/提醒/系统/翻译/计算/搜索/备忘录）+ OPTIONAL_MCP（11个）
+- [x] 读 MCP_PROFILE 环境变量：core/all/custom
+- [x] Demo 模式（_demo_mode_active()）时强制 mcp_set="none"
+- [x] 新建 app/mcp_gate.py：每个可选 MCP 声明 required_env，启动前过滤 key 缺失的
+- [x] _build_brain 拿过滤后的 enabled_mcp 列表传给 qwen-agent
+- [x] MCP_PROFILE=core 启动日志显示 8 个 MCP
+- [x] Demo 模式启动日志显示 0 个 MCP
+- [x] 飞书 MCP 缺 FEISHU_APP_ID 时自动跳过 + warning

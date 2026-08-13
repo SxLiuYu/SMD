@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] 新建 scripts/gen-cert.sh：openssl req -x509 -newkey rsa:2048 -days 3650 -nodes，CN 用 hostname
-- [ ] https_server 启动时检测 cert/ 缺失，自动调用 gen-cert.sh 生成
-- [ ] 证书生成后打印"手机同 WiFi 访问 https://<lan-ip>:8443，首次需信任证书"
-- [ ] 删 cert/ 启动 https_server，cert.pem/key.pem 自动生成
-- [ ] 证书权限 0600（key.pem）
+- [x] 新建 scripts/gen-cert.sh：openssl req -x509 -newkey rsa:2048 -days 3650 -nodes，CN 用 hostname
+- [x] https_server 启动时检测 cert/ 缺失，自动调用 gen-cert.sh 生成
+- [x] 证书生成后打印"手机同 WiFi 访问 https://<lan-ip>:8443，首次需信任证书"
+- [x] 删 cert/ 启动 https_server，cert.pem/key.pem 自动生成
+- [x] 证书权限 0600（key.pem）

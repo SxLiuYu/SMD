@@ -1,37 +1,24 @@
 # 部署指南
 
-## 方式一：桌面应用（v1.0 主打，macOS）
+## 方式一：Windows 便携版（主打，面向终端用户）
 
-### 构建
+1. 到 [Release](https://github.com/SxLiuYu/charlie-voice-assistant/releases/latest) 下载 `Charlie-Portable.zip`
+2. 解压到任意目录
+3. 双击 `charlie.exe` → 弹出原生窗口并自动打开欢迎引导页
+4. 向导里填入智谱 GLM Key（免费）和百度语音 Key（可选），保存即时生效
+5. 语音对话
 
-```bash
-cd charlie/charlie
-pip install -r requirements-core.txt -r requirements-dev.txt
-bash build.sh  # 跑测试 + PyInstaller 打包 → dist/charlie/
-```
+> 系统需装 WebView2 Runtime（Win11 自带；Win10 一般已随系统更新）。
+> 数据/日志写入 `%APPDATA%\charlie` 与 `%LOCALAPPDATA%\charlie\logs`，不污染解压目录。
 
-产物：`dist/charlie/charlie`（~200MB，含核心 Python + web + ffmpeg binary）
+构建步骤见 `docs/WINDOWS_BUILD.md`。
 
-### 分发
-
-1. 压缩 `dist/charlie/` → `charlie-mac.zip`
-2. 用户解压
-3. 双击 `charlie` → 浏览器自动开 `/welcome` 引导页
-4. 选模式（Demo 规则 / Ollama / 填 key）→ 完成 → 主界面
-5. macOS 首次打开如提示"无法验证开发者"：系统偏好设置 → 安全性与隐私 → 允许
-
-### 发布前检查
-
-```bash
-bash scripts/check-leaks.sh  # 扫描敏感信息
-```
-
-## 方式二：Python 开发
+## 方式二：Python 开发/自托管
 
 ```bash
 git clone <repo>
 cd charlie/charlie
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
 # 核心依赖（装完即可跑对话）
 pip install -r requirements-core.txt
@@ -40,26 +27,33 @@ pip install -r requirements-core.txt
 pip install -r requirements-optional.txt
 
 # 外部二进制
-brew install ffmpeg          # 必需（音频转码）
-# brew install ollama        # 可选（Demo 模式 LLM）
-# pip install esptool        # 可选（ESP32 烧录）
+# macOS:  brew install ffmpeg
+# Linux:  apt install ffmpeg
+# Windows: winget install ffmpeg
+# 可选 ESP32 烧录: pip install esptool
 
 # 配置
 cp .env.example .env
-# 编辑 .env 填入 ARK_KEY/百度/高德 key
+# 编辑 .env 填入 GLM_API_KEY/百度/高德 key
 # 或启动后访问 http://localhost:8000/setup 网页填写
 
 # 启动
-python3 voice_server.py
-# HTTPS（手机访问）：python3 https_server.py
+python voice_server.py
+# HTTPS（手机访问）：python https_server.py
 ```
 
-## 方式三：Docker（v1.1，规划中）
+## 方式三：Docker
 
 ```bash
 cp .env.example .env  # 填 key
 docker compose up -d --build
 # Ollama sidecar：docker compose --profile ollama up -d
+```
+
+## 发布前检查
+
+```bash
+bash charlie/scripts/check-leaks.sh  # 扫描敏感信息
 ```
 
 ## HTTPS 证书
@@ -68,12 +62,12 @@ docker compose up -d --build
 
 手动生成：`bash scripts/gen-cert.sh`
 
-手机同 WiFi 访问 `https://<Mac-IP>:8443`，首次需信任证书。
+手机同 WiFi 访问 `https://<电脑-IP>:8443`，首次需信任证书。
 
 ## SenseVoice 本地 ASR 模型（可选，26ms ASR）
 
 ```bash
-bash scripts/download-models.sh  # 下载 237MB 模型到 models/sense-voice/
+bash charlie/scripts/download-models.sh  # 下载 237MB 模型到 models/sense-voice/
 # 或网页：http://localhost:8000/setup → 点「下载本地 ASR 模型」
 ```
 
@@ -81,7 +75,7 @@ bash scripts/download-models.sh  # 下载 237MB 模型到 models/sense-voice/
 
 ## ESP32 开发板
 
-见 `docs/ESP32.md`。
+见 `docs/ESP32.md`。烧录使用设备自带的 AP 热点配网，写入的是干净固件，不再 patch NVS。
 
 ## Troubleshooting
 
@@ -91,11 +85,11 @@ bash scripts/download-models.sh  # 下载 237MB 模型到 models/sense-voice/
 
 ### 麦克风不可用（HTTP 连接）
 
-浏览器要求 HTTPS 才能用麦克风。运行 `python3 https_server.py`，手机/电脑用 `https://<IP>:8443` 访问。
+浏览器要求 HTTPS 才能用麦克风。运行 `python https_server.py`，手机/电脑用 `https://<IP>:8443` 访问。
 
 ### ffmpeg 未找到
 
-`brew install ffmpeg`（macOS）/ `apt install ffmpeg`（Linux）。启动时 preflight 会检测并提示。
+`winget install ffmpeg`（Windows）/ `brew install ffmpeg`（macOS）/ `apt install ffmpeg`（Linux）。启动时 preflight 会检测并提示。
 
 ### Ollama Demo 模式不可用
 
@@ -106,10 +100,11 @@ ollama pull qwen3.5:2b
 
 ### ESP32 烧录失败
 
-向导需要 sudo 访问串口。失败时手动运行：
+应用内向导会在进程内调用 esptool。失败时可手动运行（先 `pip install esptool`）：
 ```bash
-sudo python3 -m esptool --chip esp32s3 -p /dev/cu.usbmodem101 write_flash 0x0 /tmp/patched.bin
+python -m esptool --chip esp32s3 -p <串口> -b 115200 write_flash --flash_mode dio --flash_freq 80m --flash_size 16MB 0x0 firmware/charlie-esp32-flash-16MB.bin
 ```
+随后用手机连接设备热点完成 WiFi/OTA 配网，见 `docs/ESP32.md`。
 
 ## 依赖文件说明
 

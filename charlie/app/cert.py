@@ -3,7 +3,7 @@ import os
 import ssl
 import socket
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 log = logging.getLogger("magic")
 
@@ -30,8 +30,8 @@ def _generate_with_cryptography(cert_path: str, key_path: str, cn: str) -> bool:
             .issuer_name(issuer)
             .public_key(key.public_key())
             .serial_number(x509.random_serial_number())
-            .not_valid_before(datetime.utcnow())
-            .not_valid_after(datetime.utcnow() + timedelta(days=3650))
+            .not_valid_before(datetime.now(timezone.utc))
+            .not_valid_after(datetime.now(timezone.utc) + timedelta(days=3650))
             .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
             .add_extension(
                 x509.SubjectAlternativeName([x509.DNSName(cn), x509.DNSName("localhost")]),

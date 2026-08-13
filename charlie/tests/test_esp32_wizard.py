@@ -46,19 +46,33 @@ class TestEsp32Wizard:
         assert "error" in data
 
     def test_flash_starts_with_valid_input(self, client):
-        """POST /api/esp32/flash 用有效输入返回 started（mock 烧录线程）"""
-        with patch("threading.Thread") as mock_thread:
+        """POST /api/esp32/flash 仅需 port 即可启动（WiFi 改由 AP 热点门户配置）"""
+        with patch.object(voice_server._esp32_flash, "start", return_value=True) as mock_start:
             r = client.post("/api/esp32/flash", json={
                 "port": "/dev/cu.usbmodem101",
-                "ssid": "MyWiFi",
-                "password": "pass123",
-                "server_ip": "192.168.1.50",
             })
         assert r.status_code == 200
         assert r.json()["started"] is True
-        mock_thread.assert_called_once()
+        mock_start.assert_called_once()
 
-    def test_flash_rejects_missing_fields(self, client):
-        """POST /api/esp32/flash 缺字段返回 422"""
-        r = client.post("/api/esp32/flash", json={"port": "/dev/cu.usbmodem101"})
+    def test_flash_rejects_missing_port(self, client):
+        """POST /api/esp32/flash 缺少 port 返回 422"""
+        r = client.post("/api/esp32/flash", json={"ssid": "MyWiFi"})
         assert r.status_code == 422
+
+    def test_flash_ignores_wifi_fields(self, client):
+        """POST /api/esp32/flash 不再接收 ssid/password/server_ip（AP 配网），但 port 足够即可启动"""
+        with patch.object(voice_server._esp32_flash, "start", return_value=True):
+            r = client.post("/api/esp32/flash", json={"port": "COM3"})
+        assert r.status_code == 200
+        assert r.json()["started"] is True
+
+    def test_config_info_returns_provisioning_info(self, client):
+        """GET /api/esp32/config-info 返回 OTA 地址/热点名等配网信息"""
+        r = client.get("/api/esp32/config-info")
+        assert r.status_code == 200
+        data = r.json()
+        for key in ("ota_url", "ws_url", "ap_prefix", "portal_url", "http_port"):
+            assert key in data, f"缺少字段 {key}"
+        assert data["portal_url"] == "http://192.168.4.1"
+        assert "/xiaozhi/ota" in data["ota_url"]

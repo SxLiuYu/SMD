@@ -29,14 +29,14 @@ hidden_imports = [
     'baize_skills_mcp', 'mcp_ir_control',
     'mcp_common', 'app.audio', 'app.brain_health', 'app.state',
     'app.reminders', 'app.config', 'app.env_catalog', 'app.preflight',
-    'app.cert', 'app.mcp_gate', 'app.nvs_patch', 'utils',
+    'app.cert', 'app.mcp_gate', 'utils',
     # qwen_agent 隐式依赖
     'qwen_agent', 'qwen_agent.agents', 'qwen_agent.tools',
     'qwen_agent.tools.mcp_manager',
     # mcp SDK
     'mcp', 'mcp.server.fastmcp', 'mcp.client.stdio',
     'mcp.client.sse', 'mcp.client.streamable_http',
-    'flask', 'soundfile',
+    'soundfile',
     # ASR/TTS
     'requests', 'urllib3',
     # 音频处理
@@ -48,7 +48,7 @@ hidden_imports = [
     'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto',
     'uvicorn.lifespan', 'uvicorn.lifespan.on',
     # 其他
-    'psutil', 'dotenv', 'tiktoken', 'jieba',
+    'psutil', 'dotenv', 'tiktoken',
     'numpy',
     # 原生桌面窗口 (pywebview + WebView2)
     'webview', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
@@ -63,7 +63,7 @@ datas = [
     ('web', 'web'),                    # 前端静态文件 (voice/setup/welcome/esp32_setup)
     ('app', 'app'),                    # app 模块数据
     ('scripts', 'scripts'),            # gen-cert.sh, download-models.sh
-    ('skills', 'skills'),              # mimo-vision 等技能脚本
+    # 注: skills/ 下的 u2-asr-pro/u2-tts-pro 是 ClawHub 技能，Charlie 不加载，不打包
     ('.env.example', '.'),             # 配置模板
     ('fcntl_compat.py', '.'),          # Windows fcntl 垫片
     # ESP32 干净固件（已擦除 NVS，无任何 WiFi/服务器信息；用户通过 AP 热点门户配网）
@@ -97,6 +97,11 @@ for pkg in ['qwen_agent', 'mcp', 'fastapi', 'starlette', 'uvicorn', 'sse_starlet
     pkg_data = collect_data_files(pkg)
     datas.extend(pkg_data)
     hidden_imports.extend(collect_submodules(pkg))
+
+# 排除 __pycache__ / .pyc，避免把已删除模块的陈旧字节码（如 nvs_patch）打进包
+def _is_cache(src, dest):
+    return '__pycache__' in src.replace('\\', '/').split('/') or src.endswith(('.pyc', '.pyo'))
+datas = [(s, d) for (s, d) in datas if not _is_cache(s, d)]
 
 # ffmpeg 二进制文件 (从系统中查找)
 def _find_ffmpeg():
@@ -152,6 +157,7 @@ if ffmpeg_path:
     binaries.append((ffmpeg_path, 'bin'))
 if ncm_path:
     binaries.append((ncm_path, 'bin'))
+binaries = [(s, d) for (s, d) in binaries if not _is_cache(s, d)]
 
 a = Analysis(
     ['charlie_main.py'],

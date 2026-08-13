@@ -995,17 +995,17 @@ def _handle_smart_command(text: str) -> str | None:
     text_lower = text.strip().lower()
     # 系统音量控制
     if any(kw in text for kw in ['音量大', '大声点', '大一点', 'volume up', '音量加']):
-        return '音量已调大。' if _set_volume(20) else None
+        return '音量已调大。' if _set_volume(20) else '系统音量控制不可用，请手动调节。'
     if any(kw in text for kw in ['音量小', '小声点', '小一点', 'volume down', '音量减']):
-        return '音量已调小。' if _set_volume(-20) else None
+        return '音量已调小。' if _set_volume(-20) else '系统音量控制不可用，请手动调节。'
     if any(kw in text for kw in ['静音', 'mute', '消音']):
-        return '已静音。' if _mute_volume() else None
+        return '已静音。' if _mute_volume() else '系统音量控制不可用，请手动静音。'
     # 停止/暂停 — 当前无法中断 TTS, 但可以给用户反馈
     if text_lower in ('停止', '暂停', '停', 'stop', 'pause', '闭嘴'):
-        return '好的，我停。' if _mute_volume() else None
+        return '好的，我停。'
     # 睡眠模式
     if any(kw in text for kw in ['睡眠', '休眠', 'sleep', '显示器关闭']):
-        return '已进入睡眠模式。' if _sleep_display() else None
+        return '已进入睡眠模式。' if _sleep_display() else '显示器控制不可用。'
     return None
 
 

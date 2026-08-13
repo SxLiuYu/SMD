@@ -172,7 +172,7 @@ def _pref_count() -> int:
 async def version():
     return {
         "name": "Charlie",
-        "version": "3.1.0",
+        "version": "3.2.0",
         "brain": "deepseek-v4-flash + Qwen-Agent + 4 MCP (可配置)",
         "voice": "qwen3-asr/tts-flash (finna)",
         "features": ["流式语音对话", "流式文字对话", "大脑逐句产出", "TTS批量推送",

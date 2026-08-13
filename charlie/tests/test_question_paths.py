@@ -165,24 +165,32 @@ class TestAcFastPath:
 # 4. 智能命令: 音量/静音/睡眠/停止 (系统调用打桩)
 # --------------------------------------------------------------------------- #
 class TestSmartCommand:
+    """跨平台: patch platform.system 为 Darwin 以走 osascript 分支，subprocess.run 打桩。"""
+
     def test_volume_up(self):
-        with patch("subprocess.run") as m_run:
+        with patch("voice_agent.platform.system", return_value="Darwin"), \
+             patch("subprocess.run") as m_run:
             reply = voice_agent._handle_smart_command("音量大一点")
         assert reply == "音量已调大。"
         m_run.assert_called_once()
 
     def test_volume_down(self):
-        with patch("subprocess.run"):
+        with patch("voice_agent.platform.system", return_value="Darwin"), \
+             patch("subprocess.run"):
             assert voice_agent._handle_smart_command("音量小一点") == "音量已调小。"
 
     def test_mute(self):
-        with patch("subprocess.run") as m:
+        with patch("voice_agent.platform.system", return_value="Darwin"), \
+             patch("subprocess.run") as m:
             assert voice_agent._handle_smart_command("静音") == "已静音。"
         m.assert_called_once()
 
-    def test_stop_mutes_device(self):
-        with patch("subprocess.run") as m:
+    def test_stop_ack(self):
+        # "停止/闭嘴" 只回复确认，不再静音系统音量
+        with patch("voice_agent.platform.system", return_value="Darwin"), \
+             patch("subprocess.run") as m:
             assert voice_agent._handle_smart_command("闭嘴") == "好的，我停。"
+        m.assert_not_called()
 
     def test_sleep(self):
         with patch("subprocess.run") as m:
@@ -190,9 +198,11 @@ class TestSmartCommand:
         # 睡眠由 pmset 执行(短语"睡觉了"不在关键词里, 应放行到 brain)
         m.assert_not_called()
 
-    def test_osascript_failure_returns_none(self):
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("osascript", 3)):
-            assert voice_agent._handle_smart_command("音量大") is None
+    def test_volume_failure_gives_feedback(self):
+        # 系统音量控制失败时应给明确反馈，而不是静默 None
+        with patch("voice_agent.platform.system", return_value="Darwin"), \
+             patch("subprocess.run", side_effect=subprocess.TimeoutExpired("osascript", 3)):
+            assert voice_agent._handle_smart_command("音量大") == "系统音量控制不可用，请手动调节。"
 
 
 # --------------------------------------------------------------------------- #

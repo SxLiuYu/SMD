@@ -36,7 +36,12 @@ tests/old/
 tunnel_url.txt
 preferences.json
 logs/
-\n# 测试音频文件\naudio_000.wav\n*.wav\n!cert/*.pem
+# 测试音频文件
+audio_000.wav
+*.wav
+!cert/*.pem
+# 百度 OAuth token 缓存（含 access_token，绝不入库）
 .baidu_token.json
+.baidu_token_tmp*.json
 evolution_data.json
 models/

@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] _validate_env 从 env_catalog 动态生成，按分组打印状态
-- [ ] _SETUP_WHITELIST 从 env_catalog.setup_whitelist_keys() 派生
-- [ ] post_setup 校验放宽：缺必需 + demo_accept=true 可保存
-- [ ] get_setup 返回 env_catalog.setup_payload() + __demo_mode/__llm_available/__missing_required
-- [ ] 新增 GET /api/setup/mcp-status 返回分组结构
-- [ ] setup.html 分组卡片渲染（拉 /api/setup/mcp-status + /api/setup）
-- [ ] setup.html 缺失必需项时显示 Demo 勾选框
-- [ ] _write_env_file 保留原 .env 注释和顺序（不覆盖值为空的字段）
+- [x] _validate_env 从 env_catalog 动态生成，按分组打印状态
+- [x] _SETUP_WHITELIST 从 env_catalog.setup_whitelist_keys() 派生
+- [x] post_setup 校验放宽：缺必需 + demo_accept=true 可保存
+- [x] get_setup 返回 env_catalog.setup_payload() + __demo_mode/__llm_available/__missing_required
+- [x] 新增 GET /api/setup/mcp-status 返回分组结构
+- [x] setup.html 分组卡片渲染（拉 /api/setup/mcp-status + /api/setup）
+- [x] setup.html 缺失必需项时显示 Demo 勾选框
+- [x] _write_env_file 保留原 .env 注释和顺序（不覆盖值为空的字段）

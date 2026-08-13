@@ -90,13 +90,16 @@ def leaving_home() -> str:
         ac_result = ac_control("off")
         actions.append("空调已关闭")
     except Exception:
-        try:
-            esp32_ip = os.getenv("ESP32_IP", "192.168.1.7")
-            requests.post(f"http://{esp32_ip}/api/ir/send",
-                json={"device": "ac", "action": "power_off"}, timeout=5)
-            actions.append("空调已关闭")
-        except Exception:
-            actions.append("空调关闭失败（设备可能不在线）")
+        esp32_ip = os.getenv("ESP32_IP", "").strip()
+        if esp32_ip:
+            try:
+                requests.post(f"http://{esp32_ip}/api/ir/send",
+                    json={"device": "ac", "action": "power_off"}, timeout=5)
+                actions.append("空调已关闭")
+            except Exception:
+                actions.append("空调关闭失败（设备可能不在线）")
+        else:
+            actions.append("空调关闭失败（未配置 ESP32_IP）")
 
     # 2. 播报天气
     try:

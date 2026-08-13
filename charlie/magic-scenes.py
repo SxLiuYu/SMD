@@ -155,9 +155,16 @@ def _ac_control(action: str) -> str:
 
 
 def _tv_control(action: str) -> str:
-    """控制电视  TODO: 同样走废弃ESP32红外路径,需改用Tuya码库key_code参数(与空调switch_power抽象不同),待调研设备/码库ID"""
+    """控制电视 — 走 ESP32 红外网关（需在 .env 配置 ESP32_IP）。
+
+    未配置 ESP32_IP 时直接返回明确提示，不再向硬编码的内网地址发请求造成 3 秒超时。
+    （TODO: 后续可改用 Tuya 码库 key_code 参数，与空调 switch_power 抽象不同，待调研设备/码库 ID）
+    """
+    esp32_ip = os.getenv("ESP32_IP", "").strip()
+    if not esp32_ip:
+        log.info("[tv] 未配置 ESP32_IP，跳过电视红外控制")
+        return "电视控制未配置（请在设置中填写 ESP32_IP）"
     try:
-        esp32_ip = os.getenv("ESP32_IP", "192.168.1.7")
         log.info(f"[tv] 发送红外指令: action={action!r} target=http://{esp32_ip}/api/ir/send")
         resp = requests.post(f"http://{esp32_ip}/api/ir/send",
             json={"device": "tv", "action": action}, timeout=3)
@@ -165,7 +172,7 @@ def _tv_control(action: str) -> str:
         return f"电视已{action}"
     except Exception as e:
         log.warning(f"[tv] 控制失败(action={action!r}): {e}")
-        return "电视控制失败"
+        return "电视控制失败（设备可能不在线）"
 
 
 def _set_volume(level: int) -> str:

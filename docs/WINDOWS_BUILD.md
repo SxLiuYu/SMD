@@ -30,9 +30,9 @@ charlie/charlie/          ← 这是工作目录
 ├── requirements-core.txt # 核心依赖
 ├── app/                  # env_catalog.py / preflight.py / mcp_gate.py 等
 ├── web/                  # voice.html / setup.html / welcome.html / esp32_setup.html
-├── scripts/              # gen-cert.sh / download-models.sh / check-leaks.sh
-├── tests/                # 11 个产品化测试文件
-└── dist/charlie/         # macOS 构建产物（Windows 忽略）
+├── scripts/              # gen-cert.sh, download-models.sh, check-leaks.sh
+├── tests/                # pytest 测试套件（20+ 文件）
+└── dist/charlie/         # 构建产物
 ```
 
 ---
@@ -60,13 +60,14 @@ python -m pytest `
   tests/test_model_download.py `
   tests/test_setup_api.py `
   tests/test_welcome.py `
-  tests/test_nvs_patch.py `
   tests/test_esp32_wizard.py `
+  tests/test_question_paths.py `
+  tests/test_security_fixes.py `
   tests/test_charlie_main.py `
   -q
 ```
 
-预期输出：`51 passed, 1 warning`
+预期输出：`passed`（用例数随版本变化，以实际输出为准）
 
 ---
 

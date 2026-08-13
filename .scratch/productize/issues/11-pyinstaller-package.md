@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] charlie.spec 完善：打包 voice_server/voice_agent/app/web/magic-*.py + ffmpeg binary
-- [ ] build.sh：打包前跑 pytest 验证；cp .env.example 为 .env（空白模板）；打 scripts/gen-cert.sh
-- [ ] charlie_main.py frozen 模式：调 preflight.check_binary + 缺 .env 开浏览器到 /welcome
-- [ ] 缺 cert/ 时 frozen 模式自动调 gen-cert.sh
-- [ ] dist/charlie/ 生成，双击 charlie 启动
-- [ ] 双击 → 浏览器自动开到 /welcome（缺 .env 时）
-- [ ] 选 Demo规则 → 完成 → 主界面 → 说"几点了" → Charlie 报时间（3 分钟内）
-- [ ] 桌面包体积 ~200MB（不含模型）
+- [x] charlie.spec 完善：打包 voice_server/voice_agent/app/web/magic-*.py + ffmpeg binary
+- [x] build.sh：打包前跑 pytest 验证；cp .env.example 为 .env（空白模板）；打 scripts/gen-cert.sh
+- [x] charlie_main.py frozen 模式：调 preflight.check_binary + 缺 .env 开浏览器到 /welcome
+- [x] 缺 cert/ 时 frozen 模式自动调 gen-cert.sh
+- [x] dist/charlie/ 生成，双击 charlie 启动
+- [x] 双击 → 浏览器自动开到 /welcome（缺 .env 时）
+- [x] 选 Demo规则 → 完成 → 主界面 → 说"几点了" → Charlie 报时间（3 分钟内）
+- [x] 桌面包体积 ~200MB（不含模型）

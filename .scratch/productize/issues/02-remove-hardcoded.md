@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] voice_server OTA 兜底 IP `192.168.1.12` → `_get_lan_ip() or "127.0.0.1"`
-- [ ] voice_server OTA WS 端口 `:8000` → 动态用 `http_port()`
-- [ ] charlie_main 端口 `8000` → `http_port()`
-- [ ] https_server 主机名 `sxliuyudeMac-mini.local` → `socket.gethostname()`
-- [ ] mcp_common ESP32_IP 默认 `192.168.1.7` → 默认空串，空时 ESP32 工具返回"未配置"
-- [ ] 新增 `/api/lan-info` 路由返回 `{https_url, http_url, lan_ip}`
-- [ ] voice.html 删除硬编码 `192.168.1.3:8443`，运行时拉 `/api/lan-info`
-- [ ] 改 ASSISTANT_KID_HTTP_PORT=9000 启动，OTA 返回的 WS URL 含 9000
+- [x] voice_server OTA 兜底 IP `192.168.1.12` → `_get_lan_ip() or "127.0.0.1"`
+- [x] voice_server OTA WS 端口 `:8000` → 动态用 `http_port()`
+- [x] charlie_main 端口 `8000` → `http_port()`
+- [x] https_server 主机名 `sxliuyudeMac-mini.local` → `socket.gethostname()`
+- [x] mcp_common ESP32_IP 默认 `192.168.1.7` → 默认空串，空时 ESP32 工具返回"未配置"
+- [x] 新增 `/api/lan-info` 路由返回 `{https_url, http_url, lan_ip}`
+- [x] voice.html 删除硬编码 `192.168.1.3:8443`，运行时拉 `/api/lan-info`
+- [x] 改 ASSISTANT_KID_HTTP_PORT=9000 启动，OTA 返回的 WS URL 含 9000

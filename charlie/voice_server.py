@@ -3024,7 +3024,7 @@ def health():
     return {
         "ok": True,
         "service": "magic-phone-voice",
-        "version": "3.1.0",
+        "version": "3.2.0",
         "uptime_seconds": uptime_s,
         "uptime_human": f"{uptime_s//3600}h{(uptime_s%3600)//60}m",
         "brain_ready": _brain_is_warm(),

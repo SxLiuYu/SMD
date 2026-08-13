@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] 新建 web/welcome.html：三步引导，拉 /api/setup 判断当前状态
-- [ ] 新增 GET /welcome 路由返回 welcome.html
-- [ ] 新增 GET /api/welcome/status 返回 {has_env, demo_mode, ollama_online, missing_required}
-- [ ] 缺 .env 时访问 / 返回重定向到 /welcome（非 setup 已配置时正常返回主界面）
-- [ ] 选 Demo规则 → POST /api/setup with demo_accept=true → 完成 → 跳 /
-- [ ] 选 Ollama → 显示安装指引（ollama serve & ollama pull qwen3.5:2b）+ 检测按钮
-- [ ] 选填key → 跳 /setup，填完回 /welcome 完成
-- [ ] 完成后跳 voice.html 主界面
+- [x] 新建 web/welcome.html：三步引导，拉 /api/setup 判断当前状态
+- [x] 新增 GET /welcome 路由返回 welcome.html
+- [x] 新增 GET /api/welcome/status 返回 {has_env, demo_mode, ollama_online, missing_required}
+- [x] 缺 .env 时访问 / 返回重定向到 /welcome（非 setup 已配置时正常返回主界面）
+- [x] 选 Demo规则 → POST /api/setup with demo_accept=true → 完成 → 跳 /
+- [x] 选 Ollama → 显示安装指引（ollama serve & ollama pull qwen3.5:2b）+ 检测按钮
+- [x] 选填key → 跳 /setup，填完回 /welcome 完成
+- [x] 完成后跳 voice.html 主界面

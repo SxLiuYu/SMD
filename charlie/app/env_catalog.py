@@ -194,6 +194,12 @@ ENTRIES: list[EnvEntry] = [
              description="MQTT broker 端口"),
     EnvEntry("MQTT_DEVICE_ID", group="mqtt", default="esp32-default",
              description="ESP32 设备 ID（固件 hello 上报的 chip_id，用于 MQTT topic 路由）"),
+    EnvEntry("MQTT_ENABLE_OTA", group="mqtt", default="0", tunable=True,
+             description="1=OTA 响应返回 mqtt 段（当前固件 MQTT 不 subscribe，默认关闭走 WebSocket）"),
+    EnvEntry("MQTT_USER", group="mqtt", secret=True,
+             description="MQTT broker 用户名（需要认证时填写）"),
+    EnvEntry("MQTT_PASSWORD", group="mqtt", secret=True,
+             description="MQTT broker 密码"),
 
     # --- ecommerce ---
     EnvEntry("TAVILY_API_KEY", group="ecommerce", secret=True,
@@ -218,6 +224,8 @@ ENTRIES: list[EnvEntry] = [
     # --- system（运行时配置） ---
     EnvEntry("AUTH_TOKEN", group="system", secret=True,
              description="访问鉴权 Token（设置后非 localhost 请求需携带）"),
+    EnvEntry("INTERNAL_API_TOKEN", group="system", secret=True,
+             description="内部跨进程推送鉴权 Token（HTTP/HTTPS 分离部署时用；留空仅允许本机）"),
     EnvEntry("ASSISTANT_KID_TRUST_PROXY_HEADERS", default="0", group="system", tunable=True,
              description="1=信任 X-Forwarded-For（反代场景）"),
     EnvEntry("ASSISTANT_KID_HTTP_PORT", default="8000", group="system", tunable=True,
