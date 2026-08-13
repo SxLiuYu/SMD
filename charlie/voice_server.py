@@ -2709,6 +2709,94 @@ async def decision_status():
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/devices")
+async def list_devices():
+    """设备面板：WebSocket客户端 + ESP32 MQTT设备 + 连接统计"""
+    try:
+        from app.state import snapshot_xiaozhi_clients
+        from app.mqtt_server import get_server
+        import time
+
+        # WebSocket xiaozhi 客户端
+        ws_clients = snapshot_xiaozhi_clients()
+        ws_devices = []
+        for cid, info in ws_clients.items():
+            ws_devices.append({
+                "id": cid[:16] + "..." if len(cid) > 16 else cid,
+                "type": "websocket",
+                "connected_at": info.get("connected_at", ""),
+                "device_key": info.get("device_key", ""),
+            })
+
+        # MQTT ESP32 设备
+        mqtt_server = get_server()
+        mqtt_devices = []
+        if mqtt_server:
+            import app.mqtt_server as _mqtt
+            for did, sess in _mqtt._sessions.items():
+                addr = sess.get("addr")
+                mqtt_devices.append({
+                    "id": did,
+                    "type": "mqtt",
+                    "udp_addr": f"{addr[0]}:{addr[1]}" if addr else "waiting...",
+                    "connected_at": sess.get("timestamp", 0),
+                    "since_seconds": round(time.time() - sess.get("timestamp", time.time()), 1),
+                })
+
+        return {
+            "total": len(ws_devices) + len(mqtt_devices),
+            "websocket_count": len(ws_devices),
+            "mqtt_count": len(mqtt_devices),
+            "websocket_devices": ws_devices,
+            "mqtt_devices": mqtt_devices,
+            "mqtt_server_running": mqtt_server is not None,
+            "mqtt_udp_port": mqtt_server.udp_port if mqtt_server else 0,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/decisions/config")
+async def decisions_config():
+    """决策引擎配置：规则列表 + 冷却时间 + 反馈统计"""
+    try:
+        from app import load_magic_module
+        _dec = load_magic_module("magic_decisions", "magic-decisions.py")
+        if not _dec:
+            return {"error": "magic-decisions模块未加载"}
+
+        import os
+        rules = _dec.get_rules()
+        # 提取所有规则ID和优先级
+        rule_summary = []
+        for r in rules:
+            rule_summary.append({
+                "id": r["id"],
+                "priority": r.get("priority", 0),
+                "confirm": r.get("confirm", False),
+                "condition": r.get("condition", {}).get("check_desc", ""),
+            })
+
+        # 反馈统计
+        import json
+        feedback_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "decision_feedback.json")
+        feedback = {}
+        try:
+            with open(feedback_file, "r") as f:
+                feedback = json.load(f)
+        except Exception:
+            pass
+
+        return {
+            "cooldown_hours": 12,
+            "rule_count": len(rule_summary),
+            "rules": rule_summary,
+            "feedback": feedback,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/api/memory")
 async def memory_status():
     """叙事性记忆状态"""
