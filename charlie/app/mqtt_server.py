@@ -279,19 +279,20 @@ class MqttXiaozhiServer:
             return False
 
         ts = int(time.time() * 1000)
-        for i, pkt in enumerate(opus_packets):
-            packet = _build_audio_packet(aes_nonce, pkt, ts + i * 60, i)
-            try:
-                self._udp_sock.sendto(packet, addr)
-            except Exception as e:
-                log.warning(f"[mqtt-server] UDP 发送失败: {e}")
-                break
-            # 控制发送速率 (~60ms/帧)
-            time.sleep(0.06)
-
-        # MQTT 通知 TTS 结束
-        self._publish(json.dumps({"type": "tts", "state": "stop"}))
-        log.info(f"[mqtt-server] TTS 推送完成: {text[:30]} ({len(opus_packets)}帧)")
+        # 异步发送：在独立线程中逐帧发送，不阻塞调用方
+        def _send_audio():
+            for i, pkt in enumerate(opus_packets):
+                packet = _build_audio_packet(aes_nonce, pkt, ts + i * 60, i)
+                try:
+                    self._udp_sock.sendto(packet, addr)
+                except Exception as e:
+                    log.warning(f"[mqtt-server] UDP 发送失败: {e}")
+                    break
+                # 控制发送速率 (~60ms/帧)
+                time.sleep(0.06)
+            self._publish(json.dumps({"type": "tts", "state": "stop"}))
+            log.info(f"[mqtt-server] TTS 推送完成: {text[:30]} ({len(opus_packets)}帧)")
+        threading.Thread(target=_send_audio, daemon=True).start()
         return True
 
     def push_notification(self, text: str):

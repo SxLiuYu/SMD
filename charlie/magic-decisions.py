@@ -107,6 +107,42 @@ _DECISION_RULES = [
         "confirm": False,
     },
     {
+        "id": "sedentary_break",
+        "priority": 35,
+        "condition": {
+            "states": ["working"],
+            "hours": (9, 21),
+            "check_desc": "工作状态持续90分钟，提醒休息",
+            "extra_check": "sedentary_check",
+        },
+        "action": {"type": "tts", "text": "已经连续工作一个半小时了，站起来活动一下吧。"},
+        "confirm": True,
+    },
+    {
+        "id": "evening_wrapup",
+        "priority": 45,
+        "condition": {
+            "states": ["home_awake", "home_resting"],
+            "hours": (21, 23),
+            "check_desc": "晚间复盘",
+            "extra_check": "evening_wrapup_check",
+        },
+        "action": {"type": "tts", "text": ""},
+        "confirm": False,
+    },
+    {
+        "id": "arrive_home",
+        "priority": 65,
+        "condition": {
+            "states": ["home_awake"],
+            "hours": (17, 22),
+            "check_desc": "刚回家，播报天气+待办",
+            "extra_check": "arrive_home_check",
+        },
+        "action": {"type": "tts", "text": ""},
+        "confirm": False,
+    },
+    {
         "id": "meeting_reminder",
         "priority": 75,
         "condition": {
@@ -396,6 +432,90 @@ def _morning_briefing_check() -> str | None:
     return None
 
 
+# 久坐提醒去重：记录上次触发时间
+_last_sedentary_alert = 0
+
+
+def _sedentary_check() -> str | None:
+    """检查是否持续工作超过90分钟"""
+    global _last_sedentary_alert
+    now = time.time()
+    # 2小时内不重复
+    if now - _last_sedentary_alert < 7200:
+        return None
+    try:
+        from agent.state import get_user_state
+        state = get_user_state()
+        if state.get("state") != "working":
+            return None
+        # last_voice_activity 距今的秒数
+        last_voice = state.get("last_voice_activity", now)
+        working_duration = now - last_voice
+        if working_duration >= 5400:  # 90分钟
+            _last_sedentary_alert = now
+            return "已经连续工作一个半小时了，站起来活动一下吧。"
+    except Exception as e:
+        log.debug(f"[decision] sedentary_check 异常: {e}")
+    return None
+
+
+# 晚间复盘和回家去重
+_last_wrapup = 0
+_last_arrive = 0
+_previous_state = "unknown"
+
+
+def _evening_wrapup_check() -> str | None:
+    """晚间复盘：今日完成+明日待办+天气"""
+    global _last_wrapup
+    now = time.time()
+    if now - _last_wrapup < 43200:  # 12小时不重复
+        return None
+    try:
+        from app.briefing import evening_wrapup
+        text = evening_wrapup()
+        if text:
+            _last_wrapup = now
+            return text
+    except Exception as e:
+        log.debug(f"[decision] evening_wrapup 异常: {e}")
+    return None
+
+
+def _arrive_home_check() -> str | None:
+    """回家场景：检测从 away → home_awake 的状态转换"""
+    global _last_arrive, _previous_state
+    now = time.time()
+    if now - _last_arrive < 14400:  # 4小时不重复
+        return None
+    try:
+        from agent.state import get_user_state
+        current = get_user_state().get("state", "unknown")
+        just_arrived = _previous_state == "away" and current == "home_awake"
+        _previous_state = current
+        if just_arrived:
+            _last_arrive = now
+            from app.weather import get_weather_text
+            weather = get_weather_text()
+            parts = ["欢迎回家"]
+            if weather:
+                parts.append(weather)
+            # 待办
+            try:
+                from app.reminders import list_reminders
+                today = time.strftime("%Y-%m-%d")
+                due = [r for r in list_reminders(include_completed=False)
+                       if not r.get("completed") and r.get("due_date", "") <= today]
+                if due:
+                    parts.append(f"还有{len(due)}项待办")
+            except Exception:
+                pass
+            return "，".join(parts) + "。"
+    except Exception as e:
+        log.debug(f"[decision] arrive_home 异常: {e}")
+    return None
+
+
 def _contextual_greeting_check() -> str | None:
     """上下文感知问候：结合天气/待办/记忆生成一句话"""
     try:
@@ -514,6 +634,27 @@ def evaluate(user_state: dict, protocol_executor=None) -> list:
                 rule["action"]["text"] = briefing
             else:
                 continue
+        if cond.get("extra_check") == "sedentary_check":
+            sedentary = _sedentary_check()
+            if not sedentary:
+                continue
+            rule = dict(rule)
+            rule["action"] = dict(rule["action"])
+            rule["action"]["text"] = sedentary
+        if cond.get("extra_check") == "evening_wrapup_check":
+            wrapup = _evening_wrapup_check()
+            if not wrapup:
+                continue
+            rule = dict(rule)
+            rule["action"] = dict(rule["action"])
+            rule["action"]["text"] = wrapup
+        if cond.get("extra_check") == "arrive_home_check":
+            arrive = _arrive_home_check()
+            if not arrive:
+                continue
+            rule = dict(rule)
+            rule["action"] = dict(rule["action"])
+            rule["action"]["text"] = arrive
         if cond.get("extra_check") == "contextual_greeting_check":
             greeting = _contextual_greeting_check()
             if greeting:
