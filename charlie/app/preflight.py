@@ -1,14 +1,18 @@
 """外部二进制依赖检测 — 启动时检测 ffmpeg/ollama/ncm/ego-browser/esptool 是否在 PATH
 
 缺失不阻塞启动，只打印安装指引。结果可写 logs/preflight.log 供排查。
+frozen(PyInstaller)模式下，esptool 作为 Python 模块被打包，用 import 检测而非 PATH。
 """
+import sys
 import shutil
+import importlib
 import logging
 import platform as _platform
 
 log = logging.getLogger("magic")
 
 _IS_WIN = _platform.system() == "Windows"
+_FROZEN = getattr(sys, "frozen", False)
 
 # 检测的外部二进制 + 安装指引（跨平台）
 _EXTERNAL_BINARIES = {
@@ -38,7 +42,13 @@ _EXTERNAL_BINARIES = {
 
 
 def check_binary(name: str) -> bool:
-    """检测二进制是否在 PATH"""
+    """检测二进制是否在 PATH（frozen 模式下 esptool 为打包模块，用 import 检测）"""
+    if name == "esptool" and _FROZEN:
+        try:
+            importlib.import_module("esptool")
+            return True
+        except Exception:
+            return False
     return shutil.which(name) is not None
 
 

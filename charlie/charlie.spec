@@ -66,6 +66,8 @@ datas = [
     ('skills', 'skills'),              # mimo-vision 等技能脚本
     ('.env.example', '.'),             # 配置模板
     ('fcntl_compat.py', '.'),          # Windows fcntl 垫片
+    # ESP32 干净固件（已擦除 NVS，无任何 WiFi/服务器信息；用户通过 AP 热点门户配网）
+    ('../firmware/charlie-esp32-flash-16MB.bin', 'firmware'),
     # MCP 源码文件 (文件名带连字符, 无法作为模块 import, 需作为数据文件打包, 运行时按路径加载)
     ('magic-info.py', '.'),
     ('magic-music.py', '.'),
@@ -89,7 +91,9 @@ datas = [
 ]
 
 # 收集隐式依赖的包数据
-for pkg in ['qwen_agent', 'mcp', 'fastapi', 'starlette', 'uvicorn', 'sse_starlette', 'webview', 'pythonnet']:
+for pkg in ['qwen_agent', 'mcp', 'fastapi', 'starlette', 'uvicorn', 'sse_starlette', 'webview', 'pythonnet',
+            # esptool：应用内 ESP32 烧录向导需要（含 reedsolo/pyserial/bitstring 等子依赖）
+            'esptool', 'reedsolo', 'serial', 'bitstring', 'intelhex']:
     pkg_data = collect_data_files(pkg)
     datas.extend(pkg_data)
     hidden_imports.extend(collect_submodules(pkg))

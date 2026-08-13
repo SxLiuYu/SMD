@@ -3296,60 +3296,92 @@ async def esp32_detect_port():
 
 @app.post("/api/esp32/flash")
 async def esp32_flash(request: Request):
-    """触发 ESP32 烧录（后台线程：patch_nvs + esptool）"""
+    """触发 ESP32 烧录（后台线程：esptool 烧录干净固件）
+
+    固件已擦除 NVS（无任何 WiFi/服务器信息）。烧录完成后，设备开机自动进入
+    AP 热点配网模式，用户用手机连接热点、在网页里填写 WiFi 和 Charlie 的 OTA 地址即可，
+    无需在烧录时写入 WiFi（旧方案的二进制字符串替换有长度限制，已废弃）。
+    """
     try:
         data = await request.json()
     except Exception:
         return JSONResponse({"ok": False, "error": "请求数据格式错误"}, status_code=400)
     port = data.get("port", "")
-    ssid = data.get("ssid", "")
-    password = data.get("password", "")
-    server_ip = data.get("server_ip", "")
-    if not all([port, ssid, password, server_ip]):
-        return JSONResponse(
-            {"ok": False, "error": "缺少字段: port/ssid/password/server_ip"},
-            status_code=422,
-        )
-    if not _esp32_flash.start(_esp32_flash_worker, port, ssid, password, server_ip):
+    if not port:
+        return JSONResponse({"ok": False, "error": "缺少串口字段: port"}, status_code=422)
+    if not _esp32_flash.start(_esp32_flash_worker, port):
         return {"started": False, "message": "已有烧录在进行中"}
     return {"started": True, "message": "烧录已启动"}
 
 
-def _esp32_flash_worker(port: str, ssid: str, password: str, server_ip: str):
-    """后台烧录工作函数：patch_nvs 固件 → esptool 烧录 → 测连通"""
-    import subprocess
-    import tempfile
-    from app.nvs_patch import patch_nvs, build_replacements
-    fw_candidates = [
-        os.path.join(os.path.dirname(PROJECT_DIR), "firmware", "flash_16MB_local.bin"),
-        os.path.join(PROJECT_DIR, "firmware", "flash_16MB_local.bin"),
-    ]
-    fw_path = next((p for p in fw_candidates if os.path.exists(p)), None)
-    if not fw_path:
-        raise FileNotFoundError("固件 bin 未找到，请确认 firmware/flash_16MB_local.bin 存在")
-    _esp32_flash.update_progress(f"读取固件 {os.path.basename(fw_path)}")
-    with open(fw_path, "rb") as f:
-        bin_bytes = f.read()
-    _esp32_flash.update_progress("patch NVS")
-    replacements = build_replacements(ssid, password, server_ip)
-    patched = patch_nvs(bin_bytes, replacements)
-    tmp_bin = os.path.join(tempfile.gettempdir(), "charlie_esp32_patched.bin")
-    with open(tmp_bin, "wb") as f:
-        f.write(patched)
-    _esp32_flash.update_progress("esptool 烧录中")
-    _py = sys.executable  # works in both unfrozen and PyInstaller frozen mode
-    subprocess.run(
-        [_py, "-m", "esptool", "--chip", "esp32s3", "-p", port,
-         "-b", "115200", "write_flash", "--flash_mode", "dio",
-         "--flash_freq", "80m", "--flash_size", "16MB", "0x0", tmp_bin],
-        check=True, capture_output=True, text=True, timeout=120,
+def _find_esp32_firmware() -> str:
+    """查找干净的 ESP32 固件 bin（已擦除 NVS），兼容开发态与 PyInstaller frozen 模式"""
+    fw_name = "charlie-esp32-flash-16MB.bin"
+    candidates = []
+    if getattr(sys, "frozen", False):
+        # PyInstaller: 固件被打到 _MEIPASS/firmware/ 下
+        meipass = getattr(sys, "_MEIPASS", PROJECT_DIR)
+        candidates.append(os.path.join(meipass, "firmware", fw_name))
+        # 同时支持 exe 同级 firmware/ 目录（用户手动放）
+        candidates.append(os.path.join(os.path.dirname(sys.executable), "firmware", fw_name))
+    # 开发态: 仓库根 firmware/ （在 charlie/ 的上一级）
+    candidates.append(os.path.join(os.path.dirname(PROJECT_DIR), "firmware", fw_name))
+    candidates.append(os.path.join(PROJECT_DIR, "firmware", fw_name))
+    for p in candidates:
+        if os.path.exists(p):
+            return p
+    raise FileNotFoundError(
+        f"固件 {fw_name} 未找到。请确认它位于 firmware/ 目录（frozen 模式下位于 _internal/firmware/）"
     )
-    _esp32_flash.update_progress("烧录完成，测连通")
+
+
+def _esp32_flash_worker(port: str):
+    """后台烧录工作函数：把干净固件整包写入 ESP32-S3 16MB flash（0x0 起）
+
+    在进程内直接调用 esptool.main(argv=...)，不 spawn 子进程。
+    PyInstaller frozen 模式下 sys.executable 是 charlie.exe（runw 引导程序），
+    不支持 `-m esptool`，因此必须用进程内 API。
+    """
+    fw_path = _find_esp32_firmware()
+    _esp32_flash.update_progress(f"读取固件 {os.path.basename(fw_path)}")
+    # 直接烧录干净固件，不做任何二进制 patch —— WiFi/服务器地址由设备 AP 门户配置
+    _esp32_flash.update_progress("esptool 烧录中（约 30-60 秒，请勿断开设备）")
+    import esptool
+    argv = [
+        "--chip", "esp32s3", "-p", port, "-b", "115200",
+        "write_flash", "--flash_mode", "dio",
+        "--flash_freq", "80m", "--flash_size", "16MB", "0x0", fw_path,
+    ]
     try:
-        r = requests.get(f"http://{server_ip}:{http_port()}/xiaozhi/ota", timeout=3)
+        esptool.main(argv)
+    except SystemExit as e:
+        # esptool 在参数错误/连接失败时 sys.exit(code!=0)
+        if getattr(e, "code", 0) not in (0, None):
+            raise RuntimeError(f"esptool 退出码 {e.code}（请检查串口连接/驱动/端口占用）")
+    _esp32_flash.update_progress("烧录完成")
+    _esp32_flash.set_result("flashed", True)
+    # 连通性测试：Charlie 的 OTA endpoint 应当可从局域网访问
+    lan_ip = _get_lan_ip() or "127.0.0.1"
+    try:
+        r = requests.get(f"http://{lan_ip}:{http_port()}/xiaozhi/ota", timeout=3)
         _esp32_flash.set_result("connectivity", r.status_code == 200)
     except Exception:
         _esp32_flash.set_result("connectivity", False)
+
+
+@app.get("/api/esp32/config-info")
+async def esp32_config_info():
+    """返回 AP 配网指引所需信息：OTA 地址、局域网 IP、AP 热点名前缀"""
+    lan_ip = _get_lan_ip() or ""
+    port = http_port()
+    return {
+        "lan_ip": lan_ip,
+        "http_port": port,
+        "ota_url": f"http://{lan_ip}:{port}/xiaozhi/ota",
+        "ws_url": f"ws://{lan_ip}:{port}/ws/xiaozhi",
+        "ap_prefix": "lc-s3-wifi-1.54tft-",
+        "portal_url": "http://192.168.4.1",
+    }
 
 
 @app.get("/api/esp32/flash-status")

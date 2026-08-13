@@ -65,3 +65,9 @@ charlie/.baidu_token*.json
 # 交付用 patch / 运行时 token 缓存
 /*.patch
 charlie/.baidu_token*.json
+
+# 图标源
+charlie/charlie.ico
+
+# ESP32 固件镜像（16MB，通过 GitHub Release 分发，不进 git）
+firmware/*.bin
