@@ -494,7 +494,11 @@ function initSSE(){
   try{evtSource=new EventSource('/api/events');
     evtSource.onmessage=function(e){try{const n=JSON.parse(e.data);
       if(n.type==='heartbeat'||n.type==='connect')return;
-      const icon=n.type==='weather'?'🌦️':n.type==='morning'?'☀️':n.type==='bedtime'?'🌙':n.type==='health'?'⚠️':'⏰';
+      // 纯音频事件（如提醒到期 TTS）：播放音频，不渲染文字气泡，避免出现"⏰ undefined"
+      if(n.type==='audio'){if(n.audio){enqueueAudio(n.audio);}return;}
+      // 其余通知需有 text 才渲染
+      if(!n.text)return;
+      const icon=n.type==='weather'?'🌦️':n.type==='morning'?'☀️':n.type==='bedtime'?'🌙':n.type==='health'?'⚠️':n.type==='reminder'?'🔔':'⏰';
       addMsg('b',icon+' '+n.text);
       if(window.speechSynthesis){const u=new SpeechSynthesisUtterance(n.text.replace(/[\n#*]/g,' '));u.lang='zh-CN';u.rate=1.05;speechSynthesis.speak(u);}
     }catch(err){}};

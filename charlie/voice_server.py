@@ -891,6 +891,8 @@ def _reminder_scheduler():
                 text = reminder.get("text", "提醒")
                 due_str = reminder.get("due", "")
                 log.info(f"[reminder] 提醒到期(id={rid}): {text} (due={due_str})")
+                # 先推文字通知（前端显示气泡），再推语音（避免只听到声音看不到内容）
+                _add_notification(f"⏰ 提醒：{text}", "reminder")
                 _play_reminder_audio(text, reminder_id=rid)
         except Exception as e:
             log.error(f"[reminder] 调度器异常: {e}")
