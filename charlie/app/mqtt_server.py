@@ -1,15 +1,21 @@
-"""xiaozhi MQTT 协议端 — 替代 WebSocket 的常驻连接方案
+"""xiaozhi MQTT 协议端 — 替代 WebSocket 的常驻连接方案（多设备支持）
 
 ESP32 通过 OTA 切换到 MqttProtocol 后:
 1. ESP32 常驻连接 MQTT broker
-2. 用户唤醒 → ESP32 发 hello 到 publish_topic
-3. 服务器回复 hello(含 UDP server/port/AES key/nonce)
+2. 用户唤醒 → ESP32 发 hello 到 charlie/esp32/{device_id}/up
+3. 服务器回复 hello(含 UDP server/port/AES key/nonce)到 charlie/esp32/{device_id}/down
 4. ESP32 建 UDP → 加密 Opus 双向传输
 5. 对话结束 → goodbye → ESP32 回唤醒词模式（MQTT 仍保持）
 
-主动推送: 服务器随时可通过 subscribe_topic 推 JSON 消息
+主动推送: 服务器随时可通过 MQTT 推 JSON 消息到每个设备的 down topic
+
+多设备支持:
+- 订阅通配符 charlie/esp32/+/up
+- 从 topic 动态提取 device_id
+- 维护 {device_id: publish_topic} 和 {addr: device_id} 映射
+- push_tts/push_notification 广播到所有活跃设备
 """
-import os, json, asyncio, socket, struct, secrets, logging, threading, time
+import os, json, asyncio, socket, struct, secrets, logging, threading, time, re
 from typing import Optional, Callable
 
 log = logging.getLogger("magic")
@@ -26,9 +32,20 @@ MAX_UTTERANCE_FRAMES = 600    # 最大语音时长 (~36s)
 SILENCE_FRAMES_VAD = 8        # VAD确认静音帧数 (~0.48s)
 NOISE_DROP_FRAMES = 200       # 无语音超时丢弃 (~12s)
 
-# 活跃的 UDP 会话: {device_id: {"sock": socket, "aes_key": bytes, "aes_nonce": bytes, "addr": (ip,port)}}
+# 活跃的 UDP 会话: {device_id: {"aes_key": bytes, "aes_nonce": bytes, "addr": (ip,port)}}
 _sessions: dict[str, dict] = {}
 _sessions_lock = threading.Lock()
+
+# device_id → publish_topic（服务器→设备下行）
+_device_topics: dict[str, str] = {}
+_device_topics_lock = threading.Lock()
+
+# addr → device_id（UDP 反向查找）
+_addr_to_device: dict[tuple, str] = {}
+_addr_to_device_lock = threading.Lock()
+
+# 设备 topic 正则: charlie/esp32/<device_id>/up
+_TOPIC_RE = re.compile(r"^charlie/esp32/([^/]+)/up$")
 
 
 def _generate_aes_key_nonce() -> tuple[bytes, bytes]:
@@ -86,15 +103,20 @@ def _build_audio_packet(aes_nonce: bytes, payload: bytes, timestamp: int, sequen
     return bytes(header) + encrypted
 
 
+def _extract_device_id(topic: str) -> str:
+    """从 MQTT topic 提取 device_id"""
+    m = _TOPIC_RE.match(topic)
+    return m.group(1) if m else "unknown"
+
+
 class MqttXiaozhiServer:
-    """xiaozhi MQTT 协议服务端
+    """xiaozhi MQTT 协议服务端（多设备支持）
 
     负责:
-    1. 连接 MQTT broker
-    2. 订阅设备 publish_topic
-    3. 处理 hello → 回复 hello + UDP 配置
-    4. UDP 音频收发
-    5. 主动推送 TTS 到设备
+    1. 连接 MQTT broker，订阅通配符 charlie/esp32/+/up
+    2. 处理 hello → 回复 hello + UDP 配置（per-device）
+    3. UDP 音频收发（按 addr→device_id 路由）
+    4. 主动推送 TTS 到所有活跃设备
     """
 
     def __init__(self):
@@ -104,6 +126,7 @@ class MqttXiaozhiServer:
         self._local_seq = 0
         self._running = False
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        # 兼容旧代码: 保留单设备 ID（用于日志）
         self._device_id: str = ""
 
     @property
@@ -118,12 +141,13 @@ class MqttXiaozhiServer:
             return False
 
         self._loop = loop
+        # 默认设备 ID（用于日志和兼容），实际设备 ID 从 topic 动态提取
         self._device_id = os.getenv("MQTT_DEVICE_ID", "esp32-default")
         port = int(os.getenv("MQTT_PORT", "1883"))
         user = os.getenv("MQTT_USER", "")
         password = os.getenv("MQTT_PASSWORD", "")
-        subscribe_topic = f"charlie/esp32/{self._device_id}/up"   # ESP32 发 → 服务器收
-        publish_topic = f"charlie/esp32/{self._device_id}/down"   # 服务器发 → ESP32 收
+        # 通配符订阅：支持任意 device_id
+        subscribe_topic = "charlie/esp32/+/up"
 
         # 1. 启动 UDP 音频服务（固定端口，Docker 可映射）
         udp_port = int(os.getenv("MQTT_UDP_PORT", "8888"))
@@ -147,8 +171,7 @@ class MqttXiaozhiServer:
             self._client.on_message = lambda c, u, msg: self._on_mqtt_message(msg)
             self._client.connect(broker, port, 60)
             self._client.loop_start()
-            self._publish_topic = publish_topic
-            log.info(f"[mqtt-server] 已连接 {broker}:{port}, UDP端口={self._udp_port}")
+            log.info(f"[mqtt-server] 已连接 {broker}:{port}, UDP端口={self._udp_port}, 订阅={subscribe_topic}")
             return True
         except Exception as e:
             log.warning(f"[mqtt-server] 连接失败: {e}")
@@ -156,9 +179,9 @@ class MqttXiaozhiServer:
             return False
 
     def _on_mqtt_connect(self, client, subscribe_topic, rc):
-        """MQTT 连接成功 → 订阅设备上行 topic"""
+        """MQTT 连接成功 → 订阅通配符 topic"""
         client.subscribe(subscribe_topic)
-        log.info(f"[mqtt-server] 已订阅 {subscribe_topic}")
+        log.info(f"[mqtt-server] 已订阅 {subscribe_topic}（多设备）")
 
     def _on_mqtt_message(self, msg):
         """收到 ESP32 的 MQTT 消息（hello/listen/goodbye 等）"""
@@ -166,27 +189,63 @@ class MqttXiaozhiServer:
             payload = msg.payload.decode("utf-8")
             data = json.loads(payload)
             mtype = data.get("type", "")
-            log.info(f"[mqtt-server] 收到 {mtype}: {payload[:100]}")
+
+            # 从 topic 提取 device_id
+            device_id = _extract_device_id(msg.topic)
+            if device_id == "unknown":
+                log.warning(f"[mqtt-server] 无法从 topic 提取 device_id: {msg.topic}")
+                return
+
+            log.info(f"[mqtt-server] [{device_id}] 收到 {mtype}: {payload[:100]}")
 
             if mtype == "hello":
-                self._handle_hello(data)
+                self._handle_hello(data, device_id, msg.topic)
             elif mtype == "listen":
-                self._handle_listen(data)
+                self._handle_listen(data, device_id)
             elif mtype == "goodbye":
-                self._handle_goodbye(data)
+                self._handle_goodbye(data, device_id)
             elif mtype == "abort":
-                self._handle_abort(data)
+                self._handle_abort(device_id)
         except Exception as e:
             log.warning(f"[mqtt-server] 消息处理失败: {e}")
 
-    def _handle_hello(self, data: dict):
-        """处理 hello → 回复 hello + UDP 配置"""
+    def _get_publish_topic(self, device_id: str, up_topic: str) -> str:
+        """从 up_topic 推导 down topic: charlie/esp32/{device_id}/up → .../down"""
+        return up_topic.replace("/up", "/down")
+
+    def _register_device(self, device_id: str, up_topic: str):
+        """注册设备映射"""
+        down_topic = self._get_publish_topic(device_id, up_topic)
+        with _device_topics_lock:
+            _device_topics[device_id] = down_topic
+        log.info(f"[mqtt-server] 注册设备 {device_id} → {down_topic}")
+
+    def _unregister_device(self, device_id: str):
+        """注销设备映射"""
+        with _device_topics_lock:
+            _device_topics.pop(device_id, None)
+        with _addr_to_device_lock:
+            # 清理该设备的所有 addr 映射
+            addrs_to_remove = [a for a, d in _addr_to_device.items() if d == device_id]
+            for a in addrs_to_remove:
+                _addr_to_device.pop(a, None)
+
+    def _get_publish_topic_for_device(self, device_id: str) -> str:
+        """获取设备的下行 topic"""
+        with _device_topics_lock:
+            return _device_topics.get(device_id, "")
+
+    def _handle_hello(self, data: dict, device_id: str, up_topic: str):
+        """处理 hello → 回复 hello + UDP 配置（per-device）"""
+        # 注册设备映射
+        self._register_device(device_id, up_topic)
+
         # 生成 AES key/nonce
         aes_key, aes_nonce = _generate_aes_key_nonce()
 
         # 记录会话
         with _sessions_lock:
-            _sessions[self._device_id] = {
+            _sessions[device_id] = {
                 "aes_key": aes_key,
                 "aes_nonce": aes_nonce,
                 "addr": None,  # UDP 地址在收到第一个包时填充
@@ -204,7 +263,8 @@ class MqttXiaozhiServer:
             except Exception:
                 lan_ip = "127.0.0.1"
 
-        # 回复 hello
+        # 回复 hello 到该设备的 down topic
+        down_topic = self._get_publish_topic(device_id, up_topic)
         response = {
             "type": "hello",
             "transport": "udp",
@@ -222,98 +282,114 @@ class MqttXiaozhiServer:
                 "nonce": _hex_encode(aes_nonce),
             },
         }
-        self._publish(json.dumps(response, ensure_ascii=False))
-        log.info(f"[mqtt-server] hello 回复: UDP {lan_ip}:{self._udp_port}")
+        if self._client:
+            self._client.publish(down_topic, json.dumps(response, ensure_ascii=False), qos=1)
+        log.info(f"[mqtt-server] [{device_id}] hello 回复: UDP {lan_ip}:{self._udp_port}")
 
-    def _handle_listen(self, data: dict):
+    def _handle_listen(self, data: dict, device_id: str):
         """处理 listen → 开始接收语音"""
         state = data.get("state", "")
         if state == "detect":
-            log.info(f"[mqtt-server] 唤醒: {data.get('text', '')}")
+            log.info(f"[mqtt-server] [{device_id}] 唤醒: {data.get('text', '')}")
         elif state == "start":
-            log.info("[mqtt-server] 开始监听")
+            log.info(f"[mqtt-server] [{device_id}] 开始监听")
         elif state == "stop":
-            log.info("[mqtt-server] 停止监听，开始 ASR")
+            log.info(f"[mqtt-server] [{device_id}] 停止监听，开始 ASR")
 
-    def _handle_goodbye(self, data: dict):
-        """处理 goodbye → 清理 UDP 会话"""
+    def _handle_goodbye(self, data: dict, device_id: str):
+        """处理 goodbye → 清理 UDP 会话和设备映射"""
         with _sessions_lock:
-            _sessions.pop(self._device_id, None)
-        log.info(f"[mqtt-server] goodbye: {data.get('session_id', '')}")
+            _sessions.pop(device_id, None)
+        self._unregister_device(device_id)
+        log.info(f"[mqtt-server] [{device_id}] goodbye: {data.get('session_id', '')}")
 
-    def _handle_abort(self, data: dict):
+    def _handle_abort(self, device_id: str):
         """处理 abort → 中断当前播放"""
-        log.info("[mqtt-server] 中断播放")
+        log.info(f"[mqtt-server] [{device_id}] 中断播放")
 
-    def _publish(self, text: str):
-        """推 JSON 消息到 ESP32 的 subscribe_topic"""
-        if self._client:
-            self._client.publish(self._publish_topic, text, qos=1)
+    def _publish_to_device(self, device_id: str, text: str):
+        """推 JSON 消息到指定设备的 down topic"""
+        topic = self._get_publish_topic_for_device(device_id)
+        if topic and self._client:
+            self._client.publish(topic, text, qos=1)
 
-    def push_tts(self, text: str, opus_packets: list[bytes]):
-        """主动推送 TTS 到 ESP32
+    def _publish_to_all(self, text: str):
+        """推 JSON 消息到所有活跃设备"""
+        with _sessions_lock:
+            device_ids = list(_sessions.keys())
+        for did in device_ids:
+            self._publish_to_device(did, text)
+
+    def push_tts(self, text: str, opus_packets: list[bytes]) -> bool:
+        """主动推送 TTS 到所有活跃设备
 
         1. MQTT 发 JSON 通知 TTS 开始
-        2. UDP 发加密 Opus 帧
+        2. UDP 发加密 Opus 帧（per-device）
         3. MQTT 发 JSON 通知 TTS 结束
         """
         with _sessions_lock:
-            session = _sessions.get(self._device_id)
-        if not session:
-            log.warning(f"[mqtt-server] 无活跃会话，无法推送 TTS")
+            devices = list(_sessions.keys())
+        if not devices:
+            log.warning("[mqtt-server] 无活跃会话，无法推送 TTS")
             return False
 
-        # MQTT 通知 TTS 开始
-        self._publish(json.dumps({
-            "type": "tts", "state": "start",
-            "text": text,
-            "voice": "zh-CN",
-        }))
+        # 对每个设备分别发送
+        success_count = 0
+        for device_id in devices:
+            with _sessions_lock:
+                session = _sessions.get(device_id)
+            if not session:
+                continue
+            addr = session.get("addr")
+            if not addr:
+                log.warning(f"[mqtt-server] [{device_id}] 无 UDP 地址，跳过音频")
+                continue
 
-        # UDP 发送加密 Opus 帧
-        aes_key = session["aes_key"]
-        aes_nonce = session["aes_nonce"]
-        addr = session.get("addr")
-        if not addr:
-            log.warning("[mqtt-server] 无 UDP 地址，跳过音频")
-            return False
+            aes_key = session["aes_key"]
+            aes_nonce = session["aes_nonce"]
 
-        ts = int(time.time() * 1000)
-        # 异步发送：在独立线程中逐帧发送，不阻塞调用方
-        def _send_audio():
-            for i, pkt in enumerate(opus_packets):
-                packet = _build_audio_packet(aes_nonce, pkt, ts + i * 60, i)
-                try:
-                    self._udp_sock.sendto(packet, addr)
-                except Exception as e:
-                    log.warning(f"[mqtt-server] UDP 发送失败: {e}")
-                    break
-                # 控制发送速率 (~60ms/帧)
-                time.sleep(0.06)
-            self._publish(json.dumps({"type": "tts", "state": "stop"}))
-            log.info(f"[mqtt-server] TTS 推送完成: {text[:30]} ({len(opus_packets)}帧)")
-        threading.Thread(target=_send_audio, daemon=True).start()
-        return True
+            # MQTT 通知 TTS 开始
+            self._publish_to_device(device_id, json.dumps({
+                "type": "tts", "state": "start",
+                "text": text,
+                "voice": "zh-CN",
+            }))
+
+            ts = int(time.time() * 1000)
+            def _send_audio(_aes_nonce=aes_nonce, _addr=addr, _ts=ts, _packets=opus_packets, _did=device_id):
+                for i, pkt in enumerate(_packets):
+                    packet = _build_audio_packet(_aes_nonce, pkt, _ts + i * 60, i)
+                    try:
+                        self._udp_sock.sendto(packet, _addr)
+                    except Exception as e:
+                        log.warning(f"[mqtt-server] [{_did}] UDP 发送失败: {e}")
+                        break
+                    time.sleep(0.06)
+                self._publish_to_device(_did, json.dumps({"type": "tts", "state": "stop"}))
+                log.info(f"[mqtt-server] [{_did}] TTS 推送完成: {text[:30]} ({len(_packets)}帧)")
+            threading.Thread(target=_send_audio, daemon=True).start()
+            success_count += 1
+
+        log.info(f"[mqtt-server] TTS 推送: {success_count}/{len(devices)} 个设备")
+        return success_count > 0
 
     def push_notification(self, text: str):
-        """推送纯文字通知（不播音频，仅显示在 ESP32 屏幕上）"""
-        self._publish(json.dumps({
+        """推送纯文字通知（不播音频，仅显示在所有 ESP32 屏幕上）"""
+        self._publish_to_all(json.dumps({
             "type": "notification",
             "text": text,
         }))
         log.info(f"[mqtt-server] 通知推送: {text[:30]}")
 
     def _udp_recv_loop(self):
-        """UDP 接收循环 — 接收 ESP32 发来的加密 Opus 音频，VAD 端点检测后走 ASR→LLM→TTS"""
+        """UDP 接收循环 — 接收 ESP32 发来的加密 Opus 音频，VAD 端点检测后走 ASR→LLM→TTS
+
+        多设备支持: 通过 _addr_to_device 反向查找 device_id
+        """
         log.info(f"[mqtt-server] UDP 接收循环启动 (port={self._udp_port})")
-        # 端点检测状态
-        buf_frames: list[bytes] = []
-        speech_count = 0
-        silence_count = 0
-        utterance_active = False
-        hot_frames = 0
-        from collections import deque
-        tail = deque(maxlen=12)  # 预语音滚动缓冲
+
+        # 每个设备的端点检测状态: {device_id: {...}}
+        _utterance_state: dict[str, dict] = {}
 
         while self._running:
             try:
@@ -321,13 +397,19 @@ class MqttXiaozhiServer:
                 if len(data) < UDP_AUDIO_HEADER_SIZE:
                     continue
 
+                # 查找 device_id
+                with _addr_to_device_lock:
+                    device_id = _addr_to_device.get(addr)
+                if not device_id:
+                    continue
+
                 with _sessions_lock:
-                    session = _sessions.get(self._device_id)
-                    if session and not session.get("addr"):
-                        session["addr"] = addr
-                        log.info(f"[mqtt-server] ESP32 UDP 地址: {addr}")
+                    session = _sessions.get(device_id)
                     if not session:
                         continue
+                    # 记录 addr→device_id 映射
+                    with _addr_to_device_lock:
+                        _addr_to_device[addr] = device_id
                     aes_key = session["aes_key"]
                     aes_nonce = session["aes_nonce"]
 
@@ -371,54 +453,63 @@ class MqttXiaozhiServer:
 
                 is_hot = vad_speech or rms > 500
 
-                if not utterance_active:
+                # 初始化该设备的 utterance 状态
+                if device_id not in _utterance_state:
+                    _utterance_state[device_id] = {
+                        "buf_frames": [], "speech_count": 0, "silence_count": 0,
+                        "utterance_active": False, "hot_frames": 0,
+                        "tail": __import__('collections').deque(maxlen=12),
+                    }
+                st = _utterance_state[device_id]
+
+                if not st["utterance_active"]:
                     # 未开始说话：滚动缓冲 + 热帧计数
-                    tail.append(opus_frame)
+                    st["tail"].append(opus_frame)
                     if is_hot:
-                        hot_frames += 1
-                        if hot_frames >= 3:
+                        st["hot_frames"] += 1
+                        if st["hot_frames"] >= 3:
                             # 语音开始
-                            buf_frames = list(tail)
-                            speech_count = 1
-                            silence_count = 0
-                            utterance_active = True
-                            hot_frames = 0
-                            log.info("[mqtt-server] speech start (%d tail frames)", len(buf_frames))
+                            st["buf_frames"] = list(st["tail"])
+                            st["speech_count"] = 1
+                            st["silence_count"] = 0
+                            st["utterance_active"] = True
+                            st["hot_frames"] = 0
+                            log.info(f"[mqtt-server] [{device_id}] speech start ({len(st['buf_frames'])} tail frames)")
                     else:
-                        hot_frames = 0
+                        st["hot_frames"] = 0
                     continue
 
                 # 说话中：收集帧直到静音
-                buf_frames.append(opus_frame)
+                st["buf_frames"].append(opus_frame)
                 if is_hot:
-                    speech_count += 1
-                    silence_count = 0
+                    st["speech_count"] += 1
+                    st["silence_count"] = 0
                 else:
-                    silence_count += 1
+                    st["silence_count"] += 1
 
                 silence_limit = SILENCE_FRAMES_VAD
-                capped = len(buf_frames) >= MAX_UTTERANCE_FRAMES
-                noise_timeout = len(buf_frames) >= NOISE_DROP_FRAMES and speech_count < MIN_SPEECH_FRAMES
+                capped = len(st["buf_frames"]) >= MAX_UTTERANCE_FRAMES
+                noise_timeout = len(st["buf_frames"]) >= NOISE_DROP_FRAMES and st["speech_count"] < MIN_SPEECH_FRAMES
 
-                if ((speech_count >= MIN_SPEECH_FRAMES and silence_count >= silence_limit)
+                if ((st["speech_count"] >= MIN_SPEECH_FRAMES and st["silence_count"] >= silence_limit)
                         or capped or noise_timeout):
-                    had_speech = speech_count >= MIN_SPEECH_FRAMES
-                    frames = list(buf_frames)
-                    buf_frames = []
-                    speech_count = 0
-                    silence_count = 0
-                    utterance_active = False
-                    session["hot_frames"] = 0
+                    had_speech = st["speech_count"] >= MIN_SPEECH_FRAMES
+                    frames = list(st["buf_frames"])
+                    st["buf_frames"] = []
+                    st["speech_count"] = 0
+                    st["silence_count"] = 0
+                    st["utterance_active"] = False
+                    st["hot_frames"] = 0
 
                     if not had_speech:
-                        log.info("[mqtt-server] no clear speech, ignoring")
+                        log.info(f"[mqtt-server] [{device_id}] no clear speech, ignoring")
                         continue
 
-                    log.info("[mqtt-server] endpoint: %d frames", len(frames))
+                    log.info(f"[mqtt-server] [{device_id}] endpoint: {len(frames)} frames")
                     # 异步处理语音（不阻塞 UDP 接收）
                     threading.Thread(
                         target=self._process_utterance,
-                        args=(frames,),
+                        args=(frames, device_id),
                         daemon=True
                     ).start()
 
@@ -428,7 +519,7 @@ class MqttXiaozhiServer:
             except Exception as e:
                 log.debug(f"[mqtt-server] UDP 接收异常: {e}")
 
-    def _process_utterance(self, frames: list[bytes]):
+    def _process_utterance(self, frames: list[bytes], device_id: str):
         """处理一段完整语音：Opus→WAV→ASR→LLM→TTS→MQTT/UDP 下行"""
         try:
             from app.xiaozhi_codec import opus_decode_to_wav
@@ -444,7 +535,7 @@ class MqttXiaozhiServer:
             asr_text = asr(wav, "wav")
             asr_text = (asr_text or "").strip()
             if not asr_text or is_garbled_asr(asr_text):
-                self._publish_stt("")
+                self._publish_to_device(device_id, json.dumps({"type": "stt", "text": ""}, ensure_ascii=False))
                 return
 
             # 剥离唤醒词
@@ -452,59 +543,103 @@ class MqttXiaozhiServer:
             if stripped:
                 asr_text = stripped
             elif stripped == "":
-                self._publish_stt("")
+                self._publish_to_device(device_id, json.dumps({"type": "stt", "text": ""}, ensure_ascii=False))
                 return
 
-            log.info("[mqtt-server] ASR: %s", asr_text)
-            self._publish_stt(asr_text)
+            log.info(f"[mqtt-server] [{device_id}] ASR: {asr_text}")
+            self._publish_to_device(device_id, json.dumps({"type": "stt", "text": asr_text}, ensure_ascii=False))
 
             # 3. LLM + TTS
             if is_low_intent_asr(asr_text):
-                self._push_text_tts(LOW_INTENT_ASR_REPLY)
+                self._push_text_tts(LOW_INTENT_ASR_REPLY, device_id)
                 return
 
             # 调用 brain
             import voice_agent
             reply_text, reply_fmt, audio_bytes = voice_agent.voice_loop(wav, "wav")
             if audio_bytes:
-                self._push_audio_tts(asr_text, audio_bytes)
+                self._push_audio_tts(asr_text, audio_bytes, device_id)
 
         except Exception as e:
-            log.error(f"[mqtt-server] 语音处理失败: {e}")
+            log.error(f"[mqtt-server] [{device_id}] 语音处理失败: {e}")
             try:
-                self._push_text_tts("语音处理失败了，请再试一次")
+                self._push_text_tts("语音处理失败了，请再试一次", device_id)
             except Exception:
                 pass
 
-    def _publish_stt(self, text: str):
-        """推送 STT 结果到 ESP32（显示在屏幕上）"""
-        self._publish(json.dumps({"type": "stt", "text": text}, ensure_ascii=False))
+    def _publish_stt(self, text: str, device_id: str):
+        """推送 STT 结果到指定 ESP32（显示在屏幕上）"""
+        self._publish_to_device(device_id, json.dumps({"type": "stt", "text": text}, ensure_ascii=False))
 
-    def _push_text_tts(self, text: str):
+    def _push_text_tts(self, text: str, device_id: str):
         """纯文字 TTS（使用默认 TTS 引擎生成音频后推送）"""
         try:
             from voice_agent import tts_to_mp3
             mp3 = tts_to_mp3(text)
             if mp3:
-                self._push_audio_tts(text, mp3)
+                self._push_audio_tts(text, mp3, device_id)
         except Exception as e:
-            log.warning(f"[mqtt-server] TTS 失败: {e}")
+            log.warning(f"[mqtt-server] [{device_id}] TTS 失败: {e}")
 
-    def _push_audio_tts(self, text: str, mp3_data: bytes):
-        """推送 TTS 音频到 ESP32：MQTT 通知 + UDP Opus 帧"""
+    def _push_audio_tts(self, text: str, mp3_data: bytes, device_id: str):
+        """推送 TTS 音频到指定 ESP32：MQTT 通知 + UDP Opus 帧"""
         try:
             from app.xiaozhi_codec import mp3_to_opus_packets
             opus_packets = mp3_to_opus_packets(mp3_data)
             if not opus_packets:
                 return
-            self.push_tts(text, opus_packets)
+            # 只推给指定设备
+            self.push_tts_single(text, opus_packets, device_id)
         except Exception as e:
-            log.warning(f"[mqtt-server] 推送 TTS 失败: {e}")
+            log.warning(f"[mqtt-server] [{device_id}] 推送 TTS 失败: {e}")
+
+    def push_tts_single(self, text: str, opus_packets: list[bytes], device_id: str) -> bool:
+        """主动推送 TTS 到单个设备"""
+        with _sessions_lock:
+            session = _sessions.get(device_id)
+        if not session:
+            log.warning(f"[mqtt-server] [{device_id}] 无活跃会话，无法推送 TTS")
+            return False
+
+        addr = session.get("addr")
+        if not addr:
+            log.warning(f"[mqtt-server] [{device_id}] 无 UDP 地址，跳过音频")
+            return False
+
+        aes_key = session["aes_key"]
+        aes_nonce = session["aes_nonce"]
+
+        # MQTT 通知 TTS 开始
+        self._publish_to_device(device_id, json.dumps({
+            "type": "tts", "state": "start",
+            "text": text,
+            "voice": "zh-CN",
+        }))
+
+        ts = int(time.time() * 1000)
+        def _send_audio():
+            for i, pkt in enumerate(opus_packets):
+                packet = _build_audio_packet(aes_nonce, pkt, ts + i * 60, i)
+                try:
+                    self._udp_sock.sendto(packet, addr)
+                except Exception as e:
+                    log.warning(f"[mqtt-server] [{device_id}] UDP 发送失败: {e}")
+                    break
+                time.sleep(0.06)
+            self._publish_to_device(device_id, json.dumps({"type": "tts", "state": "stop"}))
+            log.info(f"[mqtt-server] [{device_id}] TTS 推送完成: {text[:30]} ({len(opus_packets)}帧)")
+        threading.Thread(target=_send_audio, daemon=True).start()
+        return True
+
+    def device_count(self) -> int:
+        """当前活跃设备数"""
+        with _sessions_lock:
+            return len(_sessions)
 
     def is_connected(self) -> bool:
         """MQTT 是否已连接且有活跃会话"""
         with _sessions_lock:
-            return self._device_id in _sessions
+            return len(_sessions) > 0
 
     def stop(self):
         """停止服务"""
@@ -516,6 +651,10 @@ class MqttXiaozhiServer:
             self._udp_sock.close()
         with _sessions_lock:
             _sessions.clear()
+        with _device_topics_lock:
+            _device_topics.clear()
+        with _addr_to_device_lock:
+            _addr_to_device.clear()
         log.info("[mqtt-server] 已停止")
 
 
@@ -538,7 +677,7 @@ def init_server(loop: asyncio.AbstractEventLoop) -> bool:
 
 
 def push_tts_to_mqtt(text: str, mp3_data: bytes) -> bool:
-    """通过 MQTT+UDP 推送 TTS 到 ESP32（供 _push_tts_to_xiaozhi 调用）
+    """通过 MQTT+UDP 推送 TTS 到所有活跃 ESP32 设备（供 _push_tts_to_xiaozhi 调用）
 
     MP3 → Opus → 加密 UDP → ESP32 播放
     """
@@ -546,7 +685,6 @@ def push_tts_to_mqtt(text: str, mp3_data: bytes) -> bool:
         return False
     try:
         from app.xiaozhi_codec import mp3_to_opus_packets
-        import asyncio
         packets = mp3_to_opus_packets(mp3_data)
         if not packets:
             log.warning("[mqtt-push] Opus 编码失败")
