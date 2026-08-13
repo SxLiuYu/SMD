@@ -16,17 +16,42 @@ def set_volume(level: int = -1) -> str:
     """
     import subprocess, platform
     try:
+        _sys = platform.system()
         if level < 0:
-            if platform.system() == "Darwin":
+            if _sys == "Darwin":
                 r = subprocess.run(["osascript", "-e", "output volume of (get volume settings)"],
                                  capture_output=True, text=True, timeout=5)
                 return f"当前音量：{r.stdout.strip()}%"
             return "音量查询仅在macOS原生环境可用"
         level = max(0, min(100, level))
-        if platform.system() == "Darwin":
+        if _sys == "Darwin":
             subprocess.run(["osascript", "-e", f"set volume output volume {level}"], timeout=5)
             return f"音量已调到{level}%"
-        return f"音量控制仅在macOS原生环境可用(容器内不支持)"
+        elif _sys == "Windows":
+            try:
+                import comtypes  # type: ignore
+                from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume  # type: ignore
+                from ctypes import cast, POINTER
+                dev = AudioUtilities.GetSpeakers()
+                iface = dev.Activate(IAudioEndpointVolume._iid_, comtypes.CLSCTX_ALL, None)
+                vol = cast(iface, POINTER(IAudioEndpointVolume))
+                vol.SetMasterVolumeLevelScalar(level / 100.0, None)
+                if level == 0:
+                    vol.SetMute(1, None)
+                else:
+                    vol.SetMute(0, None)
+                return f"音量已调到{level}%"
+            except Exception:
+                return "Windows 音量控制需安装 pycaw（pip install pycaw comtypes）"
+        else:  # Linux
+            import shutil
+            if shutil.which('amixer'):
+                subprocess.run(['amixer', '-q', 'set', 'Master', f'{level}%'], timeout=5)
+                return f"音量已调到{level}%"
+            elif shutil.which('pactl'):
+                subprocess.run(['pactl', 'set-sink-volume', '@DEFAULT_SINK@', f'{level}%'], timeout=5)
+                return f"音量已调到{level}%"
+            return "音量控制失败：未找到 amixer/pactl"
     except Exception as e:
         return f"音量控制失败：{e}"
 

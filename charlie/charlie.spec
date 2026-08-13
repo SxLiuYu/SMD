@@ -38,10 +38,9 @@ hidden_imports = [
     'mcp.client.sse', 'mcp.client.streamable_http',
     'flask', 'soundfile',
     # ASR/TTS
-    'aip',  # 百度SDK
     'requests', 'urllib3',
     # 音频处理
-    'pydub', 'audioop',
+    'audioop',
     # Web框架
     'uvicorn', 'fastapi', 'starlette', 'sse_starlette',
     'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto',
@@ -49,11 +48,14 @@ hidden_imports = [
     'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto',
     'uvicorn.lifespan', 'uvicorn.lifespan.on',
     # 其他
-    'psutil', 'dotenv', 'tiktoken', 'jieba', 'pytz',
+    'psutil', 'dotenv', 'tiktoken', 'jieba',
     'numpy',
     # 原生桌面窗口 (pywebview + WebView2)
     'webview', 'webview.platforms.edgechromium', 'webview.platforms.winforms',
     'clr', 'pythonnet',
+    # 跨平台系统控制/截图(可选，缺失自动降级)
+    'mss', 'comtypes', 'pycaw', 'pycaw.pycaw',
+    'fcntl_compat',
 ]
 
 # 收集数据文件 (前端HTML, 模板, 配置)
@@ -61,7 +63,9 @@ datas = [
     ('web', 'web'),                    # 前端静态文件 (voice/setup/welcome/esp32_setup)
     ('app', 'app'),                    # app 模块数据
     ('scripts', 'scripts'),            # gen-cert.sh, download-models.sh
+    ('skills', 'skills'),              # mimo-vision 等技能脚本
     ('.env.example', '.'),             # 配置模板
+    ('fcntl_compat.py', '.'),          # Windows fcntl 垫片
     # MCP 源码文件 (文件名带连字符, 无法作为模块 import, 需作为数据文件打包, 运行时按路径加载)
     ('magic-info.py', '.'),
     ('magic-music.py', '.'),
@@ -79,6 +83,7 @@ datas = [
     ('magic-douyin.py', '.'),
     ('magic-taobao.py', '.'),
     ('magic-recipe.py', '.'),
+    ('magic-decisions.py', '.'),       # 自主决策引擎(原遗漏)
     ('baize_skills_mcp.py', '.'),
     ('mcp_ir_control.py', '.'),
 ]
@@ -177,6 +182,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
+    upx_exclude=['*.pyd', 'pythonnet*', '*pythonnet*', '*WebView2*', '*clr*',
+                 'pycaw*', '*pycaw*', 'comtypes*', '*comtypes*'],  # 压这些会崩
     console=False,  # 原生桌面窗口模式（不弹控制台黑框）
     disable_windowed_traceback=False,
     target_architecture=None,
@@ -191,6 +198,6 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=['*.pyd', 'pythonnet*', '*WebView2*', 'pycaw*', 'comtypes*'],
     name='charlie',
 )

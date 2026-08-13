@@ -51,17 +51,36 @@ def main():
     if getattr(sys, 'frozen', False):
         _base = os.path.dirname(sys.executable)
         os.chdir(_base)
+        # windowed 模式(console=False)下 sys.stdout/stderr 为 None，uvicorn StreamHandler
+        # 会静默丢日志甚至触发 handleError 噪声。重定向到 devnull 兜底（文件 handler 仍落盘）。
+        if not sys.stdout or not getattr(sys.stdout, 'write', None):
+            sys.stdout = open(os.devnull, 'w', encoding='utf-8', errors='ignore')
+        if not sys.stderr or not getattr(sys.stderr, 'write', None):
+            sys.stderr = open(os.devnull, 'w', encoding='utf-8', errors='ignore')
+        # 【关键】frozen 下把数据/日志目录重定向到 exe 同级可写目录，
+        # 避免 PROJECT_DIR=dirname(__file__)=_internal/(只读 bundle) 导致
+        # reminders.json/conversation_history.json 写入 bundle 目录，
+        # 装到 Program Files 时还会因 os.makedirs 只读而启动崩溃。
+        _data_dir = os.environ.get("ASSISTANT_KID_DATA_DIR") or os.path.join(_base, "data")
+        _log_dir = os.environ.get("ASSISTANT_KID_LOG_DIR") or os.path.join(_base, "logs")
+        os.makedirs(_data_dir, exist_ok=True)
+        os.makedirs(_log_dir, exist_ok=True)
+        os.environ.setdefault("ASSISTANT_KID_DATA_DIR", _data_dir)
+        os.environ.setdefault("ASSISTANT_KID_LOG_DIR", _log_dir)
         # 将 bin/ 目录加入 PATH (ffmpeg) — PyInstaller 可能放在 _base/bin 或 _base/_internal/bin
         for _bin_dir in [os.path.join(_base, 'bin'),
                          os.path.join(_base, '_internal', 'bin')]:
             if os.path.isdir(_bin_dir):
                 os.environ['PATH'] = _bin_dir + os.pathsep + os.environ.get('PATH', '')
-        # 创建运行时必需的空文件
+        # 创建运行时必需的空文件（落到 DATA_DIR，与 voice_server/voice_agent 读取路径一致）
         for f in ['conversation_history.json']:
-            p = os.path.join(_base, f)
+            p = os.path.join(_data_dir, f)
             if not os.path.exists(p):
-                with open(p, 'w') as fh:
-                    fh.write('[]')
+                try:
+                    with open(p, 'w', encoding='utf-8') as fh:
+                        fh.write('[]')
+                except OSError:
+                    pass  # 只读兜底，运行期若仍不可写会在写入时报错
         # T9: 首次启动检测 + preflight
         _first_path = _ensure_first_run(_base)
         _run_preflight()
@@ -176,6 +195,27 @@ def _run_server(first_path: str = "/"):
     # 优雅关闭：通知 uvicorn 退出，等调度器收尾
     server.should_exit = True
     _srv_thread.join(timeout=3)
+    _cleanup_mcp_subprocesses()
+
+
+def _cleanup_mcp_subprocesses():
+    """窗口关闭时清理 qwen_agent 启动的 stdio MCP 子进程（防孤儿 charlie.exe --mcp）。"""
+    try:
+        import psutil
+        me = psutil.Process()
+        for child in me.children(recursive=True):
+            try:
+                # 只杀本程序自己 --mcp 派生的同名子进程，避免误杀无关进程
+                if child.name() and child.name().lower().startswith('charlie'):
+                    child.terminate()
+                    try:
+                        child.wait(timeout=2)
+                    except Exception:
+                        child.kill()
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     main()

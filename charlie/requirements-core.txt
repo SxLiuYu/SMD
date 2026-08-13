@@ -74,3 +74,9 @@ uvicorn==0.52.0
 websocket-client==1.9.0
 websockets==17.0
 yarl==1.24.5
+
+# 跨平台系统控制(音量,Windows 用)
+pycaw; platform_system == "Windows"
+comtypes; platform_system == "Windows"
+# 跨平台截图(Win/Linux)
+mss
