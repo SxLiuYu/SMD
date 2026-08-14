@@ -149,8 +149,8 @@ jobs:
 
       - name: 构建公版固件 (OOTB)
         run: |
-          # espressif/idf 容器内 export.sh 设置 IDF_PATH 和 PATH
-          source /opt/esp/idf/export.sh
+          # espressif/idf 容器：export.sh 设置 IDF_PATH 和 PATH
+          . /opt/esp/idf/export.sh
           cd esp32-src
           # 使用公版板型配置
           cat > sdkconfig.defaults << 'EOF'
@@ -176,7 +176,7 @@ jobs:
   release:
     name: 发布 Release
     needs: [build-macos, build-windows, build-linux, build-esp32]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && (always() && (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped') && (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped') && (needs.build-linux.result == 'success' || needs.build-linux.result == 'skipped'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
