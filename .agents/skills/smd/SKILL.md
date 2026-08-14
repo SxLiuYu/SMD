@@ -13,15 +13,15 @@ metadata:
 
 ## 核心能力
 
-### 1. 智能需求分类
+### 1. 智能需求分类（扩展版）
 
 | 类型 | 触发词 | 技能组合 |
 |------|--------|---------|
 | **evaluation** | 评估、review、检查、分析 | code-review + codebase-design + grilling |
-| **development** | 实现、开发、添加 | implement + tdd + codebase-design |
-| **testing** | 测试、debug、fix、验证 | tdd + diagnosing-bugs + code-review |
-| **refactoring** | 重构、优化、改进 | codebase-design + improve-codebase-architecture + tdd |
-| **self-evaluation** | 评估自己、优化自身 | codebase-design + grilling + diagnosing-bugs |
+| **development** | 实现、开发、添加 | implement + tdd + codebase-design + to-spec |
+| **testing** | 测试、debug、fix、验证 | tdd + diagnosing-bugs + code-review + research |
+| **refactoring** | 重构、优化、改进 | codebase-design + improve-codebase-architecture + tdd + to-tickets |
+| **self-evaluation** | 评估自己、优化自身 | codebase-design + grilling + diagnosing-bugs + research |
 
 ### 2. 并行执行
 

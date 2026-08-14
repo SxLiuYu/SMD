@@ -5,6 +5,11 @@ Charlie - 语音Agent核心
 对话记忆: 跨请求保留历史上下文，支持多轮连续对话，持久化到磁盘
 """
 import os, sys, json, copy, base64, requests, datetime, time, logging, asyncio, re, random, tempfile, threading, platform
+# 确保 src/ 在 Python 路径中，支持重组后的模块导入
+_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+_PROJECT_ROOT = os.path.dirname(_SRC_DIR)
 try:
     from openai import RateLimitError as _RateLimitError
 except ImportError:  # openai 未安装时降级，退回字符串匹配
@@ -16,7 +21,7 @@ except ImportError:  # Windows 无 fcntl
 from typing import Optional, Generator, Tuple, List, Dict, Any, Callable
 from contextlib import contextmanager
 if not getattr(sys, 'frozen', False):
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(_PROJECT_ROOT)
 try:
     from dotenv import load_dotenv
     _dotenv_path = os.path.join(os.path.dirname(sys.executable), ".env") if getattr(sys, "frozen", False) else None
@@ -26,8 +31,8 @@ except ImportError:
 
 log = logging.getLogger("magic")
 
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", PROJECT_DIR)
+PROJECT_DIR = _PROJECT_ROOT
+DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", os.path.join(_PROJECT_ROOT, "data"))
 os.makedirs(DATA_DIR, exist_ok=True)
 
 FINNA = os.getenv("FINNA_BASE", "https://www.finna.com.cn/v1")

@@ -6,9 +6,12 @@ import pytest
 import os, sys, ast
 
 # 确保能导入项目模块
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
+SRC_DIR = os.path.join(PROJECT_DIR, "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 
 class TestSafeMathEval:
@@ -17,7 +20,7 @@ class TestSafeMathEval:
     def setup_method(self):
         """导入_safe_math_eval函数"""
         # mcp_common.py 是安全求值实现所在 (原 baize_skills_mcp 已迁移至此)
-        from mcp_common import _safe_math_eval
+        from skills.mcp_common import _safe_math_eval
         self._eval = _safe_math_eval
 
     def test_simple_addition(self):

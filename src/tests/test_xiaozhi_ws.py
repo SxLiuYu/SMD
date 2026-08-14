@@ -20,10 +20,13 @@ from unittest.mock import patch
 
 import pytest
 
-# Ensure the charlie package root (parent of tests/) is importable regardless of cwd.
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Ensure the charlie package root (parent of src/) is importable regardless of cwd.
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
+SRC_DIR = os.path.join(PROJECT_DIR, "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 import uvicorn  # noqa: E402
 import websockets  # noqa: E402

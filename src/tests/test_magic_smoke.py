@@ -8,10 +8,13 @@ import pytest
 
 def _load_module(name, filename):
     """Load a magic-* module via importlib (handles hyphenated filenames)"""
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if project_dir not in sys.path:
-        sys.path.insert(0, project_dir)
-    spec = importlib.util.spec_from_file_location(name, filename)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    src_dir = os.path.join(project_root, "src")
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+    spec = importlib.util.spec_from_file_location(name, os.path.join(src_dir, filename))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

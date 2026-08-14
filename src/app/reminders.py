@@ -17,7 +17,8 @@ _RE_GENERIC_REMINDER = _re_rem.compile(
 )
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", PROJECT_DIR)
+# 运行时数据统一放在项目根下的 data/ 目录
+DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", os.path.join(PROJECT_DIR, "data"))
 
 # 项目根 = app/ 的上级目录(与voice_server.py同层)；测试可通过 ASSISTANT_KID_DATA_DIR 隔离。
 REMINDERS_FILE = os.path.join(DATA_DIR, "reminders.json")

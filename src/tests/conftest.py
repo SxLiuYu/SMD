@@ -4,9 +4,12 @@ Charlie - pytest配置
 """
 import sys, os, tempfile
 # 确保能导入项目模块
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
+SRC_DIR = os.path.join(PROJECT_DIR, "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
 # 设置环境变量(测试用, 避免加载真实密钥)
 os.environ.setdefault("FINNA_BASE", "https://test.example.com/v1")

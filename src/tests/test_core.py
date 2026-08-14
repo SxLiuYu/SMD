@@ -7,10 +7,11 @@ magic-evolution (pattern extraction, optimization).
 """
 import os, sys, json, time, importlib.util, tempfile, shutil
 
-# Test setup: load modules from parent dir
-PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, PARENT_DIR)
-os.chdir(PARENT_DIR)
+# Test setup: load modules from project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, "src"))
+os.chdir(PROJECT_ROOT)
 
 # Temp data dir for tests
 TMP_DIR = tempfile.mkdtemp(prefix="charlie_test_")
@@ -19,7 +20,7 @@ os.environ.pop("CHARLIE_USER_ID", None)
 
 
 def _load_module(name, filename):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(PARENT_DIR, filename))
+    spec = importlib.util.spec_from_file_location(name, os.path.join(PROJECT_ROOT, "src", filename))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
