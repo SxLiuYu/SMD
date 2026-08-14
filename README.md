@@ -10,7 +10,7 @@
 
 ## 📋 概述
 
-**SMD (Smart Development)** 是一个结合 **oh-my-opencode 多 Agent 协作** + **Matt Pocock Skills** + **多模型配置** 的智能开发辅助系统。
+**CharlieDev (Charlie Smart Development)** 是一个结合 **oh-my-opencode 多 Agent 协作** + **Matt Pocock Skills** + **多模型配置** 的智能开发辅助系统。
 
 ### 核心特性
 
@@ -188,7 +188,7 @@ smd/
 │   └── charlie-smart-dev.js    # 主执行脚本
 ├── .agents/
 │   └── skills/                 # Matt Pocock Skills (36 个)
-│       ├── smd/               # SMD 核心 skill
+│       ├── charlie-dev/       # CharlieDev 核心 skill
 │       ├── code-review/
 │       ├── tdd/
 │       ├── grilling/
