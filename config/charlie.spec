@@ -18,7 +18,13 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 block_cipher = None
 
 # 项目根目录（spec 在 config/ 下，根目录是上一级）
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# PyInstaller exec() 上下文中 __file__ 不可用，用 sys.argv[0] 或 inspect 兜底
+try:
+    _SPEC_DIR = os.path.dirname(os.path.abspath(__file__))
+except NameError:
+    import inspect
+    _SPEC_DIR = os.path.dirname(os.path.abspath(inspect.getfile(sys.modules[__name__])))
+ROOT = os.path.dirname(_SPEC_DIR)
 SRC = os.path.join(ROOT, "src")
 os.chdir(ROOT)  # PyInstaller 在项目根运行，datas 相对路径以此为基准
 
