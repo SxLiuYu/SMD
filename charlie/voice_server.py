@@ -2186,10 +2186,19 @@ async def xiaozhi_ota(request: Request):
     so the device skips activation and connects directly to /ws/xiaozhi.
     The firmware POSTs board info here; we log the body (device self-report)
     and return WS config."""
+    device_uuid = None
     try:
         body = await request.body()
         if body:
-            log.info("[xiaozhi] OTA device self-report: %s", body[:500].decode("utf-8", "replace"))
+            body_str = body[:500].decode("utf-8", "replace")
+            log.info("[xiaozhi] OTA device self-report: %s", body_str)
+            # Extract device UUID from POST body for MQTT topic personalization
+            try:
+                import json as _json
+                body_json = _json.loads(body_str)
+                device_uuid = body_json.get("uuid") or body_json.get("device_id")
+            except Exception:
+                pass
     except Exception as e:
         log.warning("[xiaozhi] OTA body read error: %s", e)
     # ESP32走局域网直连(低延迟)，不用隧道(wss可能固件不支持)
@@ -2216,15 +2225,16 @@ async def xiaozhi_ota(request: Request):
     }
 
     # 如果配置了 MQTT broker，返回 mqtt 段激活固件 MqttProtocol
-    # 注意：固件 MqttProtocol 不 subscribe，服务器推送无法到达 idle 状态的 ESP32
-    # 当前保留 mqtt 段用于未来固件支持 subscribe 后启用
-    # 现阶段 ESP32 走 WebsocketProtocol + pending queue 补发
     mqtt_broker = os.getenv("MQTT_BROKER", "")
     if mqtt_broker and os.getenv("MQTT_ENABLE_OTA", "0") == "1":
         mqtt_port = int(os.getenv("MQTT_PORT", "1883"))
         mqtt_user = os.getenv("MQTT_USER", "")
         mqtt_pass = os.getenv("MQTT_PASSWORD", "")
-        device_id = os.getenv("MQTT_DEVICE_ID", "esp32-default")
+        # Use device UUID from POST body for personalized topics, fallback to env
+        if device_uuid:
+            device_id = device_uuid[:8]  # Use first 8 chars of UUID
+        else:
+            device_id = os.getenv("MQTT_DEVICE_ID", "esp32-default")
         ota_response["mqtt"] = {
             "endpoint": f"{mqtt_broker}:{mqtt_port}",
             "client_id": f"charlie-{device_id}",
