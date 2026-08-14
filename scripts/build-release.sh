@@ -69,8 +69,26 @@ build_one() {
   echo "📦 打包 $zip_name..."
   cd "$dist_dir"
   if [ -d charlie ]; then
-    zip -r "$zip_name" charlie/ -x "*.pyc" "__pycache__/*" ".DS_Store" > /dev/null
-    SIZE=$(du -sh "$zip_name" | cut -f1)
+    # Windows 用 python 打包（系统可能没有 zip 命令）
+    if command -v zip >/dev/null 2>&1; then
+      zip -r "$zip_name" charlie/ -x "*.pyc" "__pycache__/*" ".DS_Store" > /dev/null
+    else
+      python -c "
+import zipfile, os
+name='$zip_name'
+src='charlie'
+with zipfile.ZipFile(name, 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk(src):
+      dirs[:] = [d for d in dirs if d not in {'__pycache__'}]
+      for f in files:
+        if f.endswith('.pyc') or f == '.DS_Store': continue
+        fp = os.path.join(root, f)
+        rp = os.path.relpath(fp, src).replace(os.sep, '/')
+        z.write(fp, 'Charlie/' + rp)
+print(f'Packed {name}')
+"
+    fi
+    SIZE=$(du -sh "$zip_name" 2>/dev/null | cut -f1 || echo "?")
     echo "✅ OOTB 构建成功: $zip_name ($SIZE)"
   else
     echo "❌ 构建失败: 找不到 charlie/ 目录"
