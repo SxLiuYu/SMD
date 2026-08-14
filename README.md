@@ -156,7 +156,7 @@ export TAVILY_API_KEY="your-tavily-key"
 
 ## 📦 Skills 目录
 
-### SMD 核心 Skills (11 个)
+### SMD 核心 Skills (13 个)
 
 | Skill | 用途 | 使用场景 |
 |-------|------|---------|
