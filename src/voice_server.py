@@ -22,6 +22,11 @@ import traceback
 from contextlib import asynccontextmanager, contextmanager
 from collections import deque
 from collections.abc import Callable
+# 确保 src/ 在 Python 路径中，支持重组后的模块导入
+_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+_PROJECT_ROOT = os.path.dirname(_SRC_DIR)
 # 别名: 消除函数内重复 import
 _b64 = _b64enc
 _json = json
@@ -30,7 +35,7 @@ _t = time
 _platform = platform
 _tb = traceback
 if not getattr(sys, 'frozen', False):
-    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    os.chdir(_PROJECT_ROOT)
 try:
     from dotenv import load_dotenv
     # frozen 模式下 .env 与 exe 同目录(dist/charlie/.env)，cwd 可能不在那里，需显式指定
@@ -115,7 +120,7 @@ from app.reminders import (
     DECISION_LOCK_FILE, acquire_decision_lock,
 )
 from app.routes.system import system_router
-from tuya_proxy import router as tuya_router
+from integrations.tuya_proxy import router as tuya_router
 from voice_agent import LOW_INTENT_ASR_REPLY, is_low_intent_asr
 
 ACK_AFTER_ASR_MESSAGE = "嗯，让我想想"
@@ -158,7 +163,7 @@ async def lifespan(app):
         _start_ws_cleanup()
         _warmup_brain()
         # 启动飞书群聊机器人 (WebSocket 长连接，无需公网URL)
-        from app.feishu_bot import start_feishu_bot
+        from integrations.feishu_bot import start_feishu_bot
         start_feishu_bot()
         # 预热本地 ASR (SenseVoice, 避免首次请求加载延迟 ~528ms)
         try:
@@ -170,7 +175,7 @@ async def lifespan(app):
         if os.getenv("FEISHU_PUSH_OPEN_ID"):
             try:
                 import threading as _th
-                from personalized_push import personalized_push_loop
+                from integrations.personalized_push import personalized_push_loop
                 _th.Thread(target=personalized_push_loop, daemon=True).start()
             except Exception:
                 pass

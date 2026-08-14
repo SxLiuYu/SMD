@@ -3,7 +3,9 @@
 覆盖 normalize_intent (LLM raw → MCP) 和 classify_by_keyword (关键词 → MCP)。
 """
 import sys, os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, _project_root)
+sys.path.insert(0, os.path.join(_project_root, "src"))
 
 from agent.intent_rules import normalize_intent, classify_by_keyword, get_all_domain_keywords
 

@@ -10,7 +10,7 @@ def test_voice_server_import_uses_configured_log_dir(tmp_path):
     import sys
     import subprocess
 
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     log_dir = tmp_path / "logs"
     script = (
         "import os; "
@@ -26,7 +26,7 @@ def test_voice_server_import_uses_configured_log_dir(tmp_path):
     result = subprocess.run(
         [sys.executable, "-c", script],
         cwd=project_dir,
-        env={**os.environ, "ASSISTANT_KID_LOG_DIR": str(log_dir)},
+        env={**os.environ, "ASSISTANT_KID_LOG_DIR": str(log_dir), "PYTHONPATH": os.path.join(project_dir, "src")},
         text=True,
         capture_output=True,
         check=True,
@@ -687,7 +687,7 @@ def test_preference_writers_from_separate_processes_do_not_lose_keys(tmp_path):
     import subprocess
     import sys
 
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     data_dir = tmp_path / "data"
     log_dir = tmp_path / "logs"
     start_file = tmp_path / "start"
@@ -725,10 +725,11 @@ def test_preference_writers_from_separate_processes_do_not_lose_keys(tmp_path):
         "    baize_skills_mcp.set_preference(f'{worker}_{i}', 'ok')\n"
     )
 
+    _src_path = os.path.join(project_dir, "src")
     voice_proc = subprocess.Popen(
         [sys.executable, "-c", voice_script],
         cwd=project_dir,
-        env=voice_env,
+        env={**voice_env, "PYTHONPATH": _src_path},
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -736,7 +737,7 @@ def test_preference_writers_from_separate_processes_do_not_lose_keys(tmp_path):
     mcp_proc = subprocess.Popen(
         [sys.executable, "-c", mcp_script],
         cwd=project_dir,
-        env=mcp_env,
+        env={**mcp_env, "PYTHONPATH": _src_path},
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -832,7 +833,7 @@ def test_suggest_state_writers_from_separate_processes_do_not_lose_keys(tmp_path
     import subprocess
     import sys
 
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     data_dir = tmp_path / "data"
     log_dir = tmp_path / "logs"
     start_file = tmp_path / "start"
@@ -862,10 +863,11 @@ def test_suggest_state_writers_from_separate_processes_do_not_lose_keys(tmp_path
             "    voice_server._update_suggest_state({f'{worker}_{i}': 'ok'})\n"
         )
         scripts.append(script)
+        _src_path = os.path.join(project_dir, "src")
         procs.append(subprocess.Popen(
             [sys.executable, "-c", script],
             cwd=project_dir,
-            env={**base_env, "WORKER_ID": worker},
+            env={**base_env, "WORKER_ID": worker, "PYTHONPATH": _src_path},
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1149,7 +1151,7 @@ def test_append_reminder_is_cross_process_safe(tmp_path):
         encoding="utf-8",
     )
 
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     env = os.environ.copy()
     env["SKIP_BACKGROUND"] = "1"
     env["ASSISTANT_KID_DATA_DIR"] = str(data_dir)
@@ -1158,6 +1160,7 @@ def test_append_reminder_is_cross_process_safe(tmp_path):
         child_code = (
             "import sys; "
             f"sys.path.insert(0, {project_dir!r}); "
+            f"sys.path.insert(0, {os.path.join(project_dir, 'src')!r}); "
             "from app.reminders import append_reminder; "
             f"item = append_reminder(f'并发提醒#{index}', '', None); "
             "print(item['id'])"
@@ -1298,7 +1301,7 @@ def test_scheduler_lock_status_reports_other_process_owner(tmp_path):
                     "time.sleep(2)"
                 ),
             ],
-            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            cwd=os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         )
         deadline = time.time() + 5
         while not ready_file.exists() and time.time() < deadline:

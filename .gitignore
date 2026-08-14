@@ -101,3 +101,11 @@ src/web/vosk/**/*.mat
 src/web/vosk/**/*.stats
 src/web/vosk/**/*.conf
 
+
+# 重组后的目录
+data/*.json
+data/*.lock
+data/logs/
+data/notes/
+dist/
+config/cert/

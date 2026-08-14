@@ -12,9 +12,12 @@ def _md(tmp_path_factory):
     tmp_path = str(tmp_path_factory.mktemp("decisions"))
 
     # 确保模块在 sys.path 中
-    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if project_dir not in sys.path:
-        sys.path.insert(0, project_dir)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    src_dir = os.path.join(project_root, "src")
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
 
     # 使用 exec 加载模块（文件名含连字符，无法用 import）
     mod_name = "magic_decisions_test"
@@ -23,7 +26,7 @@ def _md(tmp_path_factory):
 
     import types
     mod = types.ModuleType(mod_name)
-    mod.__file__ = os.path.join(project_dir, "magic-decisions.py")
+    mod.__file__ = os.path.join(src_dir, "skills", "magic-decisions.py")
 
     with open(mod.__file__, "r", encoding="utf-8") as f:
         code = compile(f.read(), mod.__file__, "exec")

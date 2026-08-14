@@ -17,10 +17,10 @@ metadata:
 
 | 类型 | 触发词 | 技能组合 |
 |------|--------|---------|
-| **evaluation** | 评估、review、检查、分析 | code-review + codebase-design + grilling |
-| **development** | 实现、开发、添加 | implement + tdd + codebase-design + to-spec |
+| **evaluation** | 评估、review、检查、分析 | code-review + codebase-design + grilling + triage |
+| **development** | 实现、开发、添加 | implement + tdd + codebase-design + to-spec + prototype + domain-modeling |
 | **testing** | 测试、debug、fix、验证 | tdd + diagnosing-bugs + code-review + research |
-| **refactoring** | 重构、优化、改进 | codebase-design + improve-codebase-architecture + tdd + to-tickets |
+| **refactoring** | 重构、优化、改进 | codebase-design + improve-codebase-architecture + tdd + to-tickets + domain-modeling |
 | **self-evaluation** | 评估自己、优化自身 | codebase-design + grilling + diagnosing-bugs + research |
 
 ### 2. 并行执行

@@ -1,7 +1,7 @@
 """Tuya API Proxy — 为 Charlie 和 HA 提供 Tuya 设备控制接口"""
 import os, json
 from fastapi import APIRouter, HTTPException
-from tuya_api import TuyaAPI
+from integrations.tuya_api import TuyaAPI
 
 router = APIRouter(prefix="/api/tuya", tags=["tuya"])
 
@@ -17,7 +17,7 @@ def _get_2c_api():
 def _get_2b_api():
     """2B 开发者红外云 API(空调红外发码), 需 TUYA_CLIENT_ID/TUYA_ACCESS_KEY"""
     try:
-        from tuya_api import TuyaCloudAPI
+        from integrations.tuya_api import TuyaCloudAPI
         return TuyaCloudAPI()
     except ValueError:
         raise HTTPException(503, "TUYA_CLIENT_ID/TUYA_ACCESS_KEY (2B) 未配置")

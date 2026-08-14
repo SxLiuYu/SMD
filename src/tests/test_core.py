@@ -20,7 +20,7 @@ os.environ.pop("CHARLIE_USER_ID", None)
 
 
 def _load_module(name, filename):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(PROJECT_ROOT, "src", filename))
+    spec = importlib.util.spec_from_file_location(name, os.path.join(PROJECT_ROOT, "src", "skills", filename))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

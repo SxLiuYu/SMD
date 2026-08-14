@@ -24,10 +24,14 @@ _loaded: dict[str, object] = {}
 
 
 def _resolve_path(filename: str) -> str | None:
-    """解析 magic 模块文件路径。"""
+    """解析 magic 模块文件路径。重组后 magic 模块在 src/skills/ 下。"""
+    _app_dir = _os.path.dirname(_os.path.abspath(__file__))  # src/app/
+    _src_dir = _os.path.dirname(_app_dir)                     # src/
+    _skills_dir = _os.path.join(_src_dir, "skills")
     candidates = [
+        _os.path.join(_skills_dir, filename),
         _os.path.join(_os.getcwd(), filename),
-        _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), filename),
+        _os.path.join(_os.path.dirname(_src_dir), filename),  # project root
     ]
     for path in candidates:
         if _os.path.exists(path):

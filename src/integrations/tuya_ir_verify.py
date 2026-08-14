@@ -19,7 +19,7 @@ try:
 except ImportError:
     pass
 
-from tuya_api import TuyaCloudAPI, TuyaAPIError
+from integrations.tuya_api import TuyaCloudAPI, TuyaAPIError
 
 
 def main():

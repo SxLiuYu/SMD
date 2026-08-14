@@ -1566,13 +1566,14 @@ class TestReminders:
             json.dumps([reminder], ensure_ascii=False), encoding="utf-8"
         )
 
-        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         env = os.environ.copy()
         env["SKIP_BACKGROUND"] = "1"
         env["ASSISTANT_KID_DATA_DIR"] = str(data_dir)
         child_code = (
             "import json, sys; "
             f"sys.path.insert(0, {project_dir!r}); "
+            f"sys.path.insert(0, {os.path.join(project_dir, 'src')!r}); "
             "import voice_server; "
             "print(json.dumps(voice_server.claim_due_reminders(), ensure_ascii=False))"
         )

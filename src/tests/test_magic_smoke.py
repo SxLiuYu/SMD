@@ -14,7 +14,7 @@ def _load_module(name, filename):
     src_dir = os.path.join(project_root, "src")
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
-    spec = importlib.util.spec_from_file_location(name, os.path.join(src_dir, filename))
+    spec = importlib.util.spec_from_file_location(name, os.path.join(src_dir, "skills", filename))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
