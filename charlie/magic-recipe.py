@@ -12,16 +12,15 @@
 """
 import os, json, random, re
 from datetime import datetime, timedelta
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError: pass
 
-mcp = FastMCP("magic-recipe")
+mcp = create_magic_mcp("magic-recipe")
 
 # ── 数据路径(用户数据目录，跨平台可写) ──
 RECIPE_DIR = os.environ.get("CHARLIE_RECIPE_DIR") or os.path.join(

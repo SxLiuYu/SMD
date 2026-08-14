@@ -14,9 +14,21 @@ import os, sys, subprocess, tempfile, json, threading, time, datetime, logging, 
 import queue as _queue
 import base64 as _b64enc
 import hashlib
+import hmac
+import socket
+import uuid
+import platform
+import traceback
 from contextlib import asynccontextmanager, contextmanager
 from collections import deque
 from collections.abc import Callable
+# 别名: 消除函数内重复 import
+_b64 = _b64enc
+_json = json
+_j = json
+_t = time
+_platform = platform
+_tb = traceback
 if not getattr(sys, 'frozen', False):
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -43,7 +55,6 @@ LOG_FORMAT = os.getenv("LOG_FORMAT", "text")  # "text" 或 "json"
 class JsonFormatter(_logging.Formatter):
     """JSON格式日志(便于日志聚合系统收集)"""
     def format(self, record):
-        import json as _j
         entry = {
             "ts": _logging.Formatter.formatTime(self, record),
             "level": record.levelname,
@@ -397,7 +408,6 @@ app.include_router(tuya_router)
 # ===== 全局异常处理: 捕获所有未处理异常, 记录完整堆栈到文件, 返回结构化JSON(而非裸500) =====
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception):
-    import traceback as _tb
     tb = "".join(_tb.format_exception(type(exc), exc, exc.__traceback__))
     log.error(f"[500] 未处理异常 {request.method} {request.url.path}: {exc}\n{tb}")
     return JSONResponse(
@@ -478,7 +488,6 @@ def _read_tunnel_url() -> str | None:
 def _get_lan_ip() -> str | None:
     """获取本机局域网IP (非127.x)"""
     try:
-        import socket
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
@@ -535,7 +544,6 @@ app.add_middleware(DynamicCORSMiddleware,
 
 def _check_rate(ip: str, bucket_type: str, limit: int) -> tuple:
     """检查速率, 返回(allowed, remaining, retry_after)"""
-    import time as _t
     now = _t.time()
     with _RATE_LOCK:
         # 定期清理过期IP桶(防内存泄漏, 在锁内避免竞态)
@@ -558,7 +566,6 @@ def _check_rate(ip: str, bucket_type: str, limit: int) -> tuple:
 
 def _check_session_rate(session_id: str) -> tuple:
     """检查会话速率限制, 返回(allowed, remaining, retry_after)"""
-    import time as _t
     if not session_id or session_id == "default":
         return True, _RATE_PER_SESSION, 0  # default不限
     now = _t.time()
@@ -575,7 +582,6 @@ def _check_session_rate(session_id: str) -> tuple:
 # 请求日志中间件
 @app.middleware("http")
 async def request_logger(request: Request, call_next):
-    import uuid, time as _t
     rid = str(uuid.uuid4())[:8]
     start = _t.time()
     log.debug(f"[{rid}] {request.method} {request.url.path}")
@@ -737,7 +743,6 @@ def _put_sse_event_nowait(client_q: asyncio.Queue, event_frame: str) -> None:
 def _play_reminder_audio(text: str, reminder_id: int | None = None):
     """生成提醒语音并播放到 ESP32 + 浏览器SSE + macOS afplay(异步)
     afplay 放到独立线程避免阻塞决策/调度线程"""
-    import platform as _platform
     try:
         from voice_agent import tts_to_mp3
         log.info(f"[reminder] TTS生成: {text}")
@@ -761,7 +766,6 @@ def _play_reminder_audio(text: str, reminder_id: int | None = None):
             ).start()
         else:
             # Linux/容器: 通过 SSE 推送音频给所有连接的浏览器客户端
-            import base64 as _b64
             audio_b64 = _b64.b64encode(audio).decode()
             _push_notification_to_sse(_sse_event({"type": "audio", "audio": audio_b64, "source": "reminder"}))
             log.info(f"[reminder] 通过SSE推送提醒语音 {len(audio)}字节: {text}")
@@ -792,7 +796,6 @@ def _afplay_and_cleanup(tmp_path: str, reminder_id: int | None = None):
 
 async def _async_push_tts_to_xiaozhi(ws, text: str, mp3_data: bytes):
     """异步推送 TTS Opus 音频到单个 ESP32 设备"""
-    import json as _json
     try:
         from app.xiaozhi_codec import mp3_to_opus_packets
         loop = asyncio.get_running_loop()
@@ -848,7 +851,6 @@ def _push_tts_to_xiaozhi(text: str, mp3_data: bytes):
 
     # 3. 同时转发到 HTTPS 进程（ESP32 可能连 8443）
     try:
-        import base64 as _b64
         from app.config import https_port
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -1386,7 +1388,6 @@ async def voice_api(file: UploadFile = File(...)):
         mp3_out = _wav_to_mp3(audio_out)
         degraded = not mp3_out
         log.info(f"/api/voice 完成: 识别={text[:30]} 回复={reply[:30]} WAV={len(audio_out)}→MP3={len(mp3_out)}字节 degraded={degraded}")
-        import base64 as _b64
         return {
             "text": text, "reply": reply,
             "audio": _b64.b64encode(mp3_out).decode(),
@@ -1930,7 +1931,6 @@ async def export_conversation(
         return Response(content="(对话历史为空)".encode("utf-8"), media_type="text/plain")
     
     if format == "json":
-        import json as _j
         return Response(content=_j.dumps(hist, ensure_ascii=False, indent=2).encode("utf-8"),
                        media_type="application/json",
                        headers={"Content-Disposition": "attachment; filename=conversation.json"})
@@ -2194,7 +2194,6 @@ async def xiaozhi_ota(request: Request):
             log.info("[xiaozhi] OTA device self-report: %s", body_str)
             # Extract device UUID from POST body for MQTT topic personalization
             try:
-                import json as _json
                 body_json = _json.loads(body_str)
                 device_uuid = body_json.get("uuid") or body_json.get("device_id")
             except Exception:
@@ -2275,7 +2274,7 @@ async def websocket_endpoint(ws: WebSocket):
         ci = ws.client.host if ws.client else ""
         if ci not in ("127.0.0.1", "::1", ""):
             tk = ws.query_params.get("token", "")
-            if tk != AUTH_TOKEN:
+            if not hmac.compare_digest(tk, AUTH_TOKEN):
                 await ws.close(code=4001, reason="未授权")
                 return
     ws_id = id(ws)
@@ -2629,7 +2628,6 @@ async def icon_svg(request: Request):
             return Response(content=f.read(), media_type="image/svg+xml",
                           headers={"Cache-Control": "public, max-age=86400"})
     return Response(status_code=404)
-    return _manifest_response(request)
 
 
 
@@ -3786,22 +3784,19 @@ register_xiaozhi_routes(app)
 @app.post("/api/internal/xiaozhi-push")
 async def _internal_xiaozhi_push(payload: dict, request: Request):
     """接收跨进程推送请求，转发TTS到所有已连接的ESP32"""
-    # 内部端点认证：共享密钥或仅允许本机
+    # 内部端点认证：共享密钥优先，其次仅允许本机
     internal_token = os.getenv("INTERNAL_API_TOKEN", "")
     if internal_token:
         auth = request.headers.get("X-Internal-Token", "")
-        if auth != internal_token:
+        if not hmac.compare_digest(auth, internal_token):
             return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
-    else:
-        # 无 token 时仅允许本机访问
-        client_ip = request.client.host if request.client else ""
-        if client_ip not in ("127.0.0.1", "::1", "localhost"):
-            return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
+    elif not _is_local_request(request):
+        # 未配置 INTERNAL_API_TOKEN 时仅允许本机访问（复用 auth 模块的本地检测逻辑）
+        return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
     text = payload.get("text", "")
     mp3_b64 = payload.get("mp3", "")
     if not text or not mp3_b64:
         return {"ok": False, "error": "missing text or mp3"}
-    import base64 as _b64
     from app.state import snapshot_xiaozhi_clients
     mp3_data = _b64.b64decode(mp3_b64)
 

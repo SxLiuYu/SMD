@@ -3,11 +3,11 @@
 自用定制版专属：在 main 开箱即用版基础上增加贾维斯级感知。
 全部免费API，无需额外Key。
 """
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 import logging
 
 log = logging.getLogger("magic")
-mcp = FastMCP("magic-jarvis")
+mcp = create_magic_mcp("magic-jarvis")
 
 
 @mcp.tool()

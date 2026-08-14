@@ -3,9 +3,8 @@
 替代旧版 ESP32 HTTP API 方案。
 """
 import os, json
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
@@ -17,7 +16,7 @@ from tuya_api import TuyaAPI
 AC_DEVICE_ID = os.getenv("TUYA_AC_DEVICE_ID", "")   # 空调遥控器 remote_id
 IR_DEVICE_ID = os.getenv("TUYA_IR_DEVICE_ID", "")    # 红外网关 infrared_id
 
-mcp = FastMCP("ac-control")
+mcp = create_magic_mcp("ac-control")
 
 # mode 映射 (2B scenes: 0制冷/1制热/2自动/3送风/4除湿, 与2C不同)
 MODE_2B = {

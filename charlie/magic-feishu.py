@@ -3,16 +3,15 @@
 通过飞书开放平台API操作，需要配置 FEISHU_APP_ID 和 FEISHU_APP_SECRET。
 """
 import os, json, requests, time
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError:
     pass
 
-mcp = FastMCP("magic-feishu")
+mcp = create_magic_mcp("magic-feishu")
 
 FEISHU_APP_ID = os.getenv("FEISHU_APP_ID", "")
 FEISHU_APP_SECRET = os.getenv("FEISHU_APP_SECRET", "")

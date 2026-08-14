@@ -1,11 +1,10 @@
 """magic-music: 网易云音乐播放 (6个工具)"""
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 from mcp_common import NCM_BIN, _ensure_https
 import subprocess, json as _json, random
-import logging
-log = logging.getLogger("magic")
+log = get_magic_logger("magic")
 
-mcp = FastMCP("magic-music")
+mcp = create_magic_mcp("magic-music")
 
 
 @mcp.tool()

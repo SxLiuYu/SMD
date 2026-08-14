@@ -10,12 +10,11 @@
 
 依赖: ~/.charlie/wardrobe/ (颜色搭配规则 + 衣橱数据)
 """
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 import os, json, requests, datetime, re
-import logging
-log = logging.getLogger("magic")
+log = get_magic_logger("magic")
 
-mcp = FastMCP("magic-wardrobe")
+mcp = create_magic_mcp("magic-wardrobe")
 
 WARDROBE_DIR = os.environ.get("CHARLIE_WARDROBE_DIR") or os.path.join(
     os.environ.get("ASSISTANT_KID_DATA_DIR") or os.path.expanduser("~"), "charlie", "wardrobe")

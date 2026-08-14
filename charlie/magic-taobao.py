@@ -3,16 +3,15 @@
 通过淘宝网页版搜索商品信息，无需官方API密钥。
 """
 import os, json, requests, re
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError:
     pass
 
-mcp = FastMCP("magic-taobao")
+mcp = create_magic_mcp("magic-taobao")
 
 
 @mcp.tool()

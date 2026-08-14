@@ -1,11 +1,10 @@
 """magic-info: 信息查询 (6个工具: 时间/天气/新闻/位置/翻译/计算)"""
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 from mcp_common import aliyun_chat, _safe_math_eval, ESP32_IP
 from datetime import datetime
 import os, requests
-import logging
-log = logging.getLogger("magic")
-mcp = FastMCP("magic-info")
+log = get_magic_logger("magic")
+mcp = create_magic_mcp("magic-info")
 
 
 @mcp.tool()
@@ -25,89 +24,9 @@ def get_detailed_weather(city: str = "北京") -> str:
     例: get_detailed_weather() → 返回今天详细天气+穿衣建议
         get_detailed_weather("上海") → 返回上海天气
     """
-    # 优先 AMAP，未配置时自动降级 Open-Meteo（免费无 Key）
+    # 委托到 app.weather 统一入口（AMAP → Open-Meteo 兜底，消除重复逻辑）
     from app.weather import get_weather_text
-    AMAP = os.getenv("AMAP_KEY", os.getenv("AMAP_MAPS_API_KEY", ""))
-    if not AMAP or AMAP.startswith("你的"):
-        log.info(f"[info] AMAP 未配置，降级 Open-Meteo")
-        return get_weather_text(city)
-    AMAP = os.getenv("AMAP_KEY", os.getenv("AMAP_MAPS_API_KEY", ""))
-    city_map = {"北京": "110000", "上海": "310000", "广州": "440100", "深圳": "440300",
-                "杭州": "330100", "成都": "510100", "武汉": "420100", "南京": "320100",
-                "西安": "610100", "重庆": "500000", "苏州": "320500", "天津": "120000"}
-    adcode = city_map.get(city)
-    if not adcode:
-        # 不在硬编码列表中的城市，用高德地理编码 API 查询
-        try:
-            geo_r = requests.get("https://restapi.amap.com/v3/geocode/geo",
-                params={"address": city, "key": AMAP}, timeout=5).json()
-            adcode = geo_r.get("geocodes", [{}])[0].get("adcode", "110000")
-        except Exception:
-            adcode = "110000"
-
-    try:
-        r = requests.get("https://restapi.amap.com/v3/weather/weatherInfo",
-            params={"city": adcode, "key": AMAP, "extensions": "all"}, timeout=10).json()
-        casts = (r.get("forecasts") or [{}])[0].get("casts", [])
-        if not casts:
-            return f"获取{city}天气失败"
-
-        today = casts[0]
-        day_w = today.get("dayweather", "")
-        night_w = today.get("nightweather", "")
-        day_temp = today.get("daytemp", "")
-        night_temp = today.get("nighttemp", "")
-
-        weather_parts = []
-        for w in (day_w, night_w):
-            if w and w not in weather_parts:
-                weather_parts.append(w)
-        weather = "转".join(weather_parts) if len(weather_parts) > 1 else weather_parts[0]
-
-        try:
-            avg_temp = (int(day_temp) + int(night_temp)) // 2
-        except (ValueError, TypeError):
-            avg_temp = 20
-
-        if avg_temp >= 28:
-            clothing = "天气炎热，穿短袖短裤就行"
-        elif avg_temp >= 22:
-            clothing = "天气温暖，薄长袖或短袖都可以"
-        elif avg_temp >= 15:
-            clothing = "天气凉爽，建议穿外套或卫衣"
-        elif avg_temp >= 8:
-            clothing = "天气较冷，穿厚外套或羽绒服"
-        elif avg_temp >= 0:
-            clothing = "天气很冷，穿羽绒服+保暖内衣"
-        else:
-            clothing = "严寒，穿厚羽绒服+保暖内衣+围巾手套"
-
-        umbrella = ""
-        if any("雨" in w for w in weather_parts):
-            umbrella = "，今天有雨，记得带伞"
-        elif any("雪" in w for w in weather_parts):
-            umbrella = "，今天有雪，注意防滑"
-
-        try:
-            r2 = requests.get("https://restapi.amap.com/v3/weather/weatherInfo",
-                params={"city": adcode, "key": AMAP, "extensions": "base"}, timeout=10).json()
-            live = (r2.get("lives") or [{}])[0]
-            now_temp = live.get("temperature", "")
-            now_w = live.get("weather", "")
-            now_humidity = live.get("humidity", "")
-            now_wind = f"{live.get('windpower', '')}级风" if live.get("windpower") else ""
-            realtime = f"实时：{now_w}，{now_temp}度"
-            if now_humidity:
-                realtime += f"，湿度{now_humidity}%"
-            if now_wind:
-                realtime += f"，{now_wind}"
-        except Exception:
-            realtime = ""
-
-        result = f"{city}今天{weather}，{day_temp}到{night_temp}度。{realtime}。{clothing}{umbrella}。"
-        return result
-    except Exception as e:
-        return f"获取{city}天气失败：{e}"
+    return get_weather_text(city)
 
 
 @mcp.tool()
@@ -311,10 +230,48 @@ def run_code(code: str) -> str:
     例: run_code("print(sum(range(100)))") → 计算1到99的和
         run_code("import datetime; print(datetime.datetime.now())") → 获取当前时间
     """
-    import sys as _sys, io as _io, json as _json, traceback as _tb
-    # 安全限制: 不允许导入 os, subprocess, shutil 等危险模块
-    _BLOCKED_MODULES = {'os', 'subprocess', 'shutil', 'socket', 'ctypes', 'signal', 'multiprocessing', 'threading', 'fcntl'}
-    # 捕获输出
+    import sys as _sys, io as _io, json as _json, traceback as _tb, ast as _ast
+    _BLOCKED_MODULES = {'os', 'subprocess', 'shutil', 'socket', 'ctypes', 'signal',
+                        'multiprocessing', 'threading', 'fcntl', 'sys', 'pickle',
+                        'marshal', 'code', 'codeop', 'pty', 'posix', 'pwd', 'grp',
+                        'crypt', 'gc', 'traceback', 'bdb', 'pdb', 'profile',
+                        'cgitb', 'inspect', 'site', 'compileall', 'py_compile',
+                        'zipimport', 'pkgutil', 'modulefinder', 'runpy', 'importlib'}
+    _BLOCKED_ATTRS = {'__import__', '__subclasses__', '__bases__', '__mro__',
+                      '__class__', '__subclasshook__', '__init_subclass__',
+                      '__prepare__', '__instancecheck__', '__subclasscheck__',
+                      '_getframe', '_get_ident', 'system', 'popen', 'exec',
+                      'eval', 'compile', 'breakpoint', 'open', 'input',
+                      '__loader__', '__spec__', '__package__', '__cached__',
+                      '__file__', '__path__', '__name__', '__doc__',
+                      '__builtins__', '__builtin__', '__debug__',
+                      'getattr', 'setattr', 'delattr', 'hasattr',
+                      '__getattribute__', '__setattr__', '__delattr__',
+                      'globals', 'locals', 'vars', 'dir'}
+
+    def _check_ast(node, depth=0):
+        """AST 遍历检查危险操作，抛 SyntaxError 阻止执行"""
+        if depth > 50:
+            raise SyntaxError("代码嵌套层级过深")
+        if isinstance(node, _ast.Import):
+            for alias in node.names:
+                if alias.name.split('.')[0] in _BLOCKED_MODULES:
+                    raise SyntaxError(f"禁止导入模块: {alias.name}")
+        elif isinstance(node, _ast.ImportFrom):
+            if node.module and node.module.split('.')[0] in _BLOCKED_MODULES:
+                raise SyntaxError(f"禁止导入模块: {node.module}")
+        elif isinstance(node, _ast.Attribute):
+            if isinstance(node.attr, str) and node.attr in _BLOCKED_ATTRS:
+                raise SyntaxError(f"禁止访问属性: {node.attr}")
+        elif isinstance(node, _ast.Name):
+            if isinstance(node.id, str) and node.id in _BLOCKED_ATTRS:
+                raise SyntaxError(f"禁止使用名称: {node.id}")
+        elif isinstance(node, _ast.Call):
+            if isinstance(node.func, _ast.Name) and node.func.id in _BLOCKED_ATTRS:
+                raise SyntaxError(f"禁止调用函数: {node.func.id}")
+        for child in _ast.iter_child_nodes(node):
+            _check_ast(child, depth + 1)
+
     _stdout = _io.StringIO()
     _stderr = _io.StringIO()
     _old_stdout = _sys.stdout
@@ -322,10 +279,30 @@ def run_code(code: str) -> str:
     try:
         _sys.stdout = _stdout
         _sys.stderr = _stderr
-        # 编译检查安全
-        _tree = compile(code, '<code>', 'exec')
-        # 执行
-        exec(code, {'__builtins__': __builtins__})
+        _tree = _ast.parse(code)
+        _check_ast(_tree)
+        _compiled = compile(_tree, '<code>', 'exec')
+        exec(_compiled, {'__builtins__': {
+            'print': print, 'len': len, 'range': range, 'int': int, 'float': float,
+            'str': str, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple,
+            'set': set, 'sum': sum, 'min': min, 'max': max, 'abs': abs, 'round': round,
+            'sorted': sorted, 'reversed': reversed, 'enumerate': enumerate, 'zip': zip,
+            'map': map, 'filter': filter, 'type': type, 'isinstance': isinstance,
+            'issubclass': issubclass, 'chr': chr, 'ord': ord, 'hex': hex, 'oct': oct,
+            'bin': bin, 'repr': repr, 'format': format, 'pow': pow, 'divmod': divmod,
+            'all': any, 'any': all, 'iter': iter, 'next': next, 'slice': slice,
+            'True': True, 'False': False, 'None': None,
+            'Exception': Exception, 'ValueError': ValueError, 'TypeError': TypeError,
+            'KeyError': KeyError, 'IndexError': IndexError, 'StopIteration': StopIteration,
+            'ZeroDivisionError': ZeroDivisionError, 'ArithmeticError': ArithmeticError,
+            'AttributeError': AttributeError, 'ImportError': ImportError,
+            'LookupError': LookupError, 'RuntimeError': RuntimeError,
+            'math': __import__('math'), 'json': __import__('json'),
+            'datetime': __import__('datetime'), 're': __import__('re'),
+            'collections': __import__('collections'), 'itertools': __import__('itertools'),
+            'functools': __import__('functools'), 'random': __import__('random'),
+            'statistics': __import__('statistics'),
+        }})
         _output = _stdout.getvalue()
         _error = _stderr.getvalue()
         if _output and _error:
@@ -336,6 +313,8 @@ def run_code(code: str) -> str:
             return f"错误:\n{_error}"
         else:
             return "代码执行成功，无输出。"
+    except SyntaxError as _e:
+        return f"安全限制: {_e}"
     except Exception as _e:
         return f"执行错误:\n{_tb.format_exc()}"
     finally:

@@ -12,13 +12,12 @@ v2 改进:
 - 时间衰减平滑化 (30天以上仍有基础权重)
 - 记忆修正 (correct_memory) 和语义去重 (dedup_memories)
 """
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 import os, json, datetime, re, threading, time, hashlib
 from collections import defaultdict
-import logging
-log = logging.getLogger("magic")
+log = get_magic_logger("magic")
 
-mcp = FastMCP("magic-memory")
+mcp = create_magic_mcp("magic-memory")
 
 DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
 def _get_memory_file():

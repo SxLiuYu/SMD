@@ -9,12 +9,11 @@
 底层 ego-browser 调用已迁移至共享库 ego_lite_client.EgoClient。
 """
 import json, os, re
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 from ego_lite_client import EgoClient, EgoError
-import logging
-log = logging.getLogger("magic")
+log = get_magic_logger("magic")
 
-mcp = FastMCP("magic-browser")
+mcp = create_magic_mcp("magic-browser")
 
 TASK_SPACE_PREFIX = "charlie_browser"
 _ego_client = EgoClient(TASK_SPACE_PREFIX)

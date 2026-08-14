@@ -3,15 +3,14 @@
 只保留搜索/互联网/购物相关工具
 """
 import os, requests
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError: pass
 
-mcp = FastMCP("baize-skills")
+mcp = create_magic_mcp("baize-skills")
 
 
 def _check_key(key: str, name: str):

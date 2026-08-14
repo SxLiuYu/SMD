@@ -1,10 +1,9 @@
 """magic-life: 生活服务 (4个工具: 外卖/充电桩/特斯拉空调/出门场景)"""
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 from mcp_common import ESP32_IP
 import os, requests
-import logging
-log = logging.getLogger("magic")
-mcp = FastMCP("magic-life")
+log = get_magic_logger("magic")
+mcp = create_magic_mcp("magic-life")
 
 
 @mcp.tool()

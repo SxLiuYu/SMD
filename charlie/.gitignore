@@ -45,3 +45,6 @@ audio_000.wav
 .baidu_token_tmp*.json
 evolution_data.json
 models/
+# PyInstaller 构建产物
+dist/
+build/

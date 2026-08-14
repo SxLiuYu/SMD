@@ -2,13 +2,12 @@
 
 Charlie 的自进化能力：从对话中学习，越用越懂你。
 """
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 import os, json, datetime, re, hashlib, time, threading
 from collections import Counter, defaultdict
-import logging
-log = logging.getLogger("magic")
+log = get_magic_logger("magic")
 
-mcp = FastMCP("magic-evolution")
+mcp = create_magic_mcp("magic-evolution")
 
 # ===== 学习数据存储 =====
 DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", os.path.dirname(os.path.abspath(__file__)))

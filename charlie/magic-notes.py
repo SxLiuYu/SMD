@@ -1,9 +1,8 @@
 """magic-notes: 备忘录 (2个工具)"""
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 import os
-import logging
-log = logging.getLogger("magic")
-mcp = FastMCP("magic-notes")
+log = get_magic_logger("magic")
+mcp = create_magic_mcp("magic-notes")
 
 
 @mcp.tool()

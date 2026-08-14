@@ -1,8 +1,7 @@
 """magic-reminder: 提醒/定时器/日历 (3个工具)"""
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
-mcp = FastMCP("magic-reminder")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
+mcp = create_magic_mcp("magic-reminder")
 
 
 @mcp.tool()

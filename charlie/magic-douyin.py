@@ -3,16 +3,15 @@
 通过抖音网页版API搜索和获取视频信息，无需官方API密钥。
 """
 import os, json, requests, re
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 try:
     from dotenv import load_dotenv; load_dotenv()
 except ImportError:
     pass
 
-mcp = FastMCP("magic-douyin")
+mcp = create_magic_mcp("magic-douyin")
 
 
 @mcp.tool()

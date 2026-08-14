@@ -8,12 +8,12 @@ v2 改进:
 - learn_protocol() 用 ARK LLM 解析自然语言步骤, 替代关键词匹配
 - execute_protocol() 支持条件分支和步骤间延迟
 """
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 import os, requests, datetime, subprocess, json as _json, threading, time, logging
 
 log = logging.getLogger("magic")
 
-mcp = FastMCP("magic-scenes")
+mcp = create_magic_mcp("magic-scenes")
 
 DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
 PROTOCOLS_FILE = os.path.join(DATA_DIR, "protocols.json")

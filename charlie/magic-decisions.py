@@ -15,7 +15,7 @@ DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", os.path.dirname(os.path.absp
 DECISIONS_FILE = os.path.join(DATA_DIR, "decision_history.json")
 FEEDBACK_FILE = os.path.join(DATA_DIR, "decision_feedback.json")
 PENDING_FILE = os.path.join(DATA_DIR, "pending_confirmation.json")
-_decision_lock = threading.Lock()
+_decision_lock = threading.RLock()  # 可重入锁: _load_feedback/_save_feedback 内部也获取同一个锁
 
 # 冷却时间: 每个决策每12小时最多触发一次（24h太长，会错过当天窗口）
 _COOLDOWN_HOURS = 12

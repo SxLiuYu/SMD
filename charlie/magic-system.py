@@ -1,8 +1,7 @@
 """magic-system: 系统控制 (3个工具: 音量/语速/状态)"""
-from mcp.server.fastmcp import FastMCP
-import logging
-log = logging.getLogger("magic")
-mcp = FastMCP("magic-system")
+from app.magic_base import create_magic_mcp, get_magic_logger
+log = get_magic_logger("magic")
+mcp = create_magic_mcp("magic-system")
 
 
 @mcp.tool()

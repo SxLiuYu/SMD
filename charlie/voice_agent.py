@@ -70,6 +70,7 @@ INTENT_FAILURE_COOLDOWN = float(os.getenv("ASSISTANT_KID_INTENT_FAILURE_COOLDOWN
 
 # 从 agent/ 子模块导入
 from agent.intent import LOW_INTENT_ASR_REPLY, is_low_intent_asr, is_garbled_asr
+from agent.intent_rules import normalize_intent, classify_by_keyword, get_all_domain_keywords
 from agent.cache import _cache_get, _cache_set, _cache_get_interrupted, _cache_lock, _cache, _CACHE_TTL, _CACHE_MAX
 from agent.history import (
     _history, _sessions, MAX_HISTORY, MAX_SESSIONS, _history_lock, HISTORY_FILE, HISTORY_LOCK_FILE,
@@ -250,33 +251,8 @@ def intent_classifier_status() -> Dict[str, Any]:
     }
 
 def _normalize_intent(raw: str) -> str:
-    """将 LLM 返回的 raw 意图字符串映射为 MCP 名（单一来源，消除 ARK/Ollama 两支漂移）
-
-    修复 bug: Ollama fallback 里 "remind" → "magic-music"（应为 magic-reminder）
-    """
-    raw = (raw or "").strip().lower()
-    if "amap" in raw or "map" in raw: return "amap-maps"
-    elif "baize" in raw or "search" in raw: return "baize-skills"
-    elif "music" in raw: return "magic-music"
-    elif "remind" in raw: return "magic-reminder"
-    elif "note" in raw: return "magic-notes"
-    elif "system" in raw: return "magic-system"
-    elif "info" in raw: return "magic-info"
-    elif "life" in raw: return "magic-life"
-    elif "scenes" in raw or "scene" in raw: return "magic-scenes"
-    elif "evolution" in raw or "learn" in raw: return "magic-evolution"
-    elif "browser" in raw: return "magic-browser"
-    elif "apps" in raw: return "magic-apps"
-    elif "feishu" in raw: return "magic-feishu"
-    elif "douyin" in raw: return "magic-douyin"
-    elif "taobao" in raw: return "magic-taobao"
-    elif "recipe" in raw or "cook" in raw or "菜" in raw or "食谱" in raw: return "magic-recipe"
-    elif "wardrobe" in raw or "clothes" in raw or "穿搭" in raw: return "magic-wardrobe"
-    elif "magic" in raw: return "magic-music"
-    elif "ac" in raw or "air" in raw or "control" in raw: return "ac-control"
-    elif "file" in raw or "fs" in raw: return "filesystem"
-    elif "vision" in raw or "mimo" in raw or "screen" in raw or "截图" in raw: return "mimo-vision"
-    else: return "none"
+    """将 LLM 返回的 raw 意图字符串映射为 MCP 名（委托到 agent/intent_rules.py）。"""
+    return normalize_intent(raw)
 
 
 def _classify_intent(text: str) -> str:
@@ -295,47 +271,18 @@ def _classify_intent(text: str) -> str:
             log.info(f"[intent] 分类冷却中，{_intent_disabled_until - now:.0f}秒内默认none")
             return "none"
     # 快速关键词预判: 如果文本明确包含领域关键词, 直接返回, 跳过LLM调用
-    _KEYWORD_MAP = [
-        ({"天气", "气温", "下雨", "温度", "几度", "穿什么", "今天天气", "明天天气", "今天冷", "今天热"}, "amap-maps"),
-        ({"地图", "导航", "附近", "我在哪", "路线", "怎么走", "到哪"}, "amap-maps"),
-        ({"搜一下", "查一下", "查查", "谷歌", "购物", "买东西"}, "baize-skills"),
-        ({"提醒", "定时", "闹钟", "备忘", "日程", "待办", "记一下", "提醒我"}, "magic-reminder"),
-        ({"笔记", "备忘录", "记下来", "记一下"}, "magic-notes"),
-        ({"音量", "说慢", "说快", "语速", "大声", "小声"}, "magic-system"),
-        ({"状态", "运行", "负载", "设备"}, "magic-system"),
-        ({"新闻", "头条", "热点"}, "magic-info"),
-        ({"时间", "几点", "日期", "星期"}, "magic-info"),
-        ({"翻译", "翻成", "英语说", "怎么说"}, "magic-info"),
-        ({"计算", "算一下", "换算", "等于多少", "等于几", "加", "减", "乘", "除"}, "magic-info"),
-        ({"放歌", "放一首", "放个", "播放", "听歌", "放周杰伦", "放毛不易", "音乐", "歌单", "停止播放", "每日推荐", "随机", "来一首", "播一首", "点一首", "放首", "放点", "整首", "整点", "循环", "单曲", "来首", "点歌", "唱首歌", "放音乐"}, "magic-music"),
-        ({"空调", "电视", "制冷", "制热", "风扇", "开灯", "关灯", "关闭空调", "关闭电视"}, "ac-control"),
-        ({"文件", "读文件", "写文件", "笔记"}, "filesystem"),
-        ({"外卖", "点餐", "购物", "商品", "查一下", "充电桩", "特斯拉", "出门"}, "magic-life"),
-        ({"做菜", "菜谱", "食谱", "做什么菜", "食材", "吃什么", "吃饭", "怎么做", "做法", "怎么煮", "怎么炒", "今天吃啥", "今晚吃啥", "中午吃啥", "推荐个菜", "推荐一道菜", "凉菜", "热菜", "汤", "主食", "下饭", "买菜", "番茄炒蛋", "可乐鸡翅"}, "magic-recipe"),
-        ({"学习", "进化", "自进化", "优化", "自我优化", "自学习", "学习进度", "进化状态"}, "magic-evolution"),
-        ({"淘宝", "京东", "比价", "商品", "价格对比", "买东西", "购物", "买"}, "magic-taobao"),
-        ({"浏览器", "打开网页", "打开网站", "访问", "浏览", "爬取", "截图", "页面", "网页", "百度"}, "magic-browser"),
-        ({"微信", "支付宝", "今日头条", "美团", "拼多多", "大众点评", "猫眼", "大麦", "咸鱼", "外卖", "酒店", "机票", "火车票", "高铁", "电影票", "餐厅", "日料", "火锅", "美食", "门票", "演出", "演唱会"}, "magic-apps"),
-        ({"飞书", "飞书文档", "飞书消息", "飞书日历", "日历"}, "magic-feishu"),
-        ({"抖音", "douyin", "抖音搜索", "抖音视频", "抖音热搜", "热门视频", "热搜"}, "magic-douyin"),
-        ({"晚安", "睡觉", "好梦", "休息吧", "睡吧", "睡", "goodnight"}, "magic-scenes"),
-        ({"早上好", "早安", "起床", "good morning", "上午好"}, "magic-scenes"),
-        ({"电影", "看电影", "视频", "追剧", "观影", "movie"}, "magic-scenes"),
-        ({"看看屏幕", "屏幕上有什么", "截图分析", "帮我看看屏幕", "截屏", "识别图片", "图上有什么", "看看这张图", "看看这张", "看看这个图", "屏幕上显示什么", "屏幕上有啥"}, "mimo-vision"),
-    ]
-    # 闲聊短句预判: ≤6字 + 不含任何领域关键词 → 直接none, 跳过LLM (最佳实践: Suki/Gladia分层路由)
-    _ALL_DOMAIN_KEYWORDS = set()
-    for kw_set, _ in _KEYWORD_MAP:
-        _ALL_DOMAIN_KEYWORDS |= kw_set
+    # 规则外化到 agent/intent_rules.py，新增技能只需添加规则条目
+    # 闲聊短句预判: ≤6字 + 不含任何领域关键词 → 直接none, 跳过LLM
+    _ALL_DOMAIN_KEYWORDS = get_all_domain_keywords()
     if len(text) <= 6 and not any(kw in text for kw in _ALL_DOMAIN_KEYWORDS):
         log.info(f"[intent] 闲聊短句跳过LLM: '{text}' → none")
         _intent_cache_set(text, "none")
         return "none"
-    for keywords, mcp_name in _KEYWORD_MAP:
-        if any(kw in text for kw in keywords):
-            log.info(f"[intent] 关键词命中: '{text[:30]}' → {mcp_name}")
-            _intent_cache_set(text, mcp_name)
-            return mcp_name
+    mcp = classify_by_keyword(text)
+    if mcp is not None:
+        log.info(f"[intent] 关键词命中: '{text[:30]}' → {mcp}")
+        _intent_cache_set(text, mcp)
+        return mcp
     prompt = (
         "任务: 判断用户输入需要哪个工具, 只回一个词\n"
         "选项: none | amap-maps | baize-skills | filesystem | magic-music | magic-reminder | magic-notes | magic-system | magic-info | magic-life | ac-control | magic-recipe\n"

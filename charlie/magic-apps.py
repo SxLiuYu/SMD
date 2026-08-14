@@ -6,12 +6,11 @@
 底层 ego-browser 调用已迁移至共享库 ego_lite_client.EgoClient。
 """
 import json, os, time
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 from ego_lite_client import EgoClient, EgoError
-import logging
-log = logging.getLogger("magic")
+log = get_magic_logger("magic")
 
-mcp = FastMCP("magic-apps")
+mcp = create_magic_mcp("magic-apps")
 
 # App 网页版URL
 APP_URLS = {

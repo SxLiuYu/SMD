@@ -61,8 +61,8 @@ def _streak(logs: list[str]) -> int:
 # ===== MCP 工具 =====
 
 try:
-    from mcp.server.fastmcp import FastMCP
-    mcp = FastMCP("habits")
+    from app.magic_base import create_magic_mcp, get_magic_logger
+    mcp = create_magic_mcp("habits")
 
     @mcp.tool()
     def log_habit(habit: str) -> str:

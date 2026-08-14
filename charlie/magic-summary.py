@@ -7,12 +7,11 @@
 - 用户说 "今天发生了什么事" → 生成今日摘要
 - 用户说 "总结一下昨天" → 生成昨日回顾
 """
-from mcp.server.fastmcp import FastMCP
+from app.magic_base import create_magic_mcp, get_magic_logger
 import os, json, datetime, time, re
-import logging
-log = logging.getLogger("magic")
+log = get_magic_logger("magic")
 
-mcp = FastMCP("magic-summary")
+mcp = create_magic_mcp("magic-summary")
 
 DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", os.path.dirname(os.path.abspath(__file__)))
 

@@ -1,0 +1,31 @@
+{
+  "search": {
+    "enabled": true,
+    "primary": "tavily",
+    "fallback": "searxng",
+    "maxResults": 5,
+    "providers": {
+      "tavily": {
+        "apiKey": "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",
+        "url": "https://api.tavily.com/search"
+      },
+      "searxng": {
+        "baseUrl": "http://localhost:8080",
+        "enabled": true
+      },
+      "deepseek": {
+        "apiKey": "${DEEPSEEK_API_KEY}",
+        "url": "https://api.deepseek.com/v1",
+        "enabled": true
+      }
+    }
+  },
+  "agents": {
+    "maxParallel": 5,
+    "timeout": 60000
+  },
+  "skills": {
+    "directory": ".agents/skills",
+    "autoLoad": true
+  }
+}
