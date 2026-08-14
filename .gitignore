@@ -75,3 +75,16 @@ firmware/*.bin
 # 技能本地密钥（不进 git）
 charlie/skills/*/.env.local
 charlie/skills/*/.env
+
+# SMD 敏感配置（包含真实 API Keys）
+.models.json
+.smart-dev.json
+.env
+!.env.example
+
+# DSH 凭证
+.dsh/.credentials.yaml
+
+# 大型二进制文件
+*.zip
+!README.md
