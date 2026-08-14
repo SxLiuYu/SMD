@@ -1,5 +1,4 @@
-# Charlie CI 依赖 — 非固定版本，适合 CI 环境
-# 核心运行时依赖
+# Charlie CI 依赖 — 精简版，适合 CI 环境
 fastapi
 uvicorn
 starlette
@@ -12,7 +11,6 @@ requests
 httpx
 aiohttp
 websockets
-websocket-client
 numpy
 openai
 tiktoken
@@ -25,7 +23,6 @@ psutil
 typer
 rich
 pillow
-pygments
 jsonschema
 jsonlines
 regex
