@@ -149,6 +149,8 @@ jobs:
 
       - name: 构建公版固件 (OOTB)
         run: |
+          # espressif/idf 容器内 export.sh 设置 IDF_PATH 和 PATH
+          source /opt/esp/idf/export.sh
           cd esp32-src
           # 使用公版板型配置
           cat > sdkconfig.defaults << 'EOF'
@@ -157,15 +159,12 @@ jobs:
           CONFIG_PARTITION_TABLE_CUSTOM=y
           CONFIG_OTA_URL="https://github.com/SxLiuYu/SMD/releases/latest/download/firmware.bin"
           EOF
-          # 尝试多种可能的 idf.py 路径
-          for p in /opt/esp/idf/tools/idf.py /opt/esp/idf/idf.py ~/.espressif/tools/idf/5.1.4/idf.py; do
-            [ -f "$p" ] && "$p" build && break
-          done || { echo "⚠️ ESP-IDF 工具链未找到，跳过固件构建"; exit 0; }
+          idf.py build
           mkdir -p ../dist/firmware
           cp build/bootloader/bootloader.bin ../dist/firmware/ 2>/dev/null || true
           cp build/partition_table/partition-table.bin ../dist/firmware/ 2>/dev/null || true
           cp build/ota_data_initial.bin ../dist/firmware/ 2>/dev/null || true
-          cp build/charlie-esp32.bin ../dist/firmware/
+          cp build/charlie-esp32.bin ../dist/firmware/ 2>/dev/null || true
 
       - name: 上传固件产物
         uses: actions/upload-artifact@v4
