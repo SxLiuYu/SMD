@@ -223,7 +223,7 @@ smd/
 
 1. 在 `.agents/skills/` 创建 skill 目录
 2. 添加 `SKILL.md` 文件
-3. 在 SMD 的配置中添加新 skill
+3. 在 CharlieDev 的配置中添加新 skill
 
 ---
 
