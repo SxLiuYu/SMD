@@ -18,5 +18,15 @@ jobs:
       - name: 安装依赖
         run: python -m pip install pytest fastapi uvicorn starlette sse-starlette pydantic pydantic-settings python-dotenv requests httpx aiohttp numpy openai tiktoken qwen-agent mcp PyJWT cryptography dashscope psutil typer rich pillow jsonschema regex
 
-      - name: 运行测试
-        run: python -m pytest src/tests/test_intent_rules.py src/tests/test_reminders.py src/tests/test_core.py src/tests/test_magic_smoke.py src/tests/test_security_fixes.py src/tests/test_state.py src/tests/test_decisions.py src/tests/test_config.py src/tests/test_utils.py src/tests/test_mcp_gate.py -q --tb=short
+      - name: 运行测试（逐个定位问题）
+        run: |
+          python -m pytest src/tests/test_intent_rules.py -q --tb=short 2>&1; echo "E1=$?"
+          python -m pytest src/tests/test_reminders.py -q --tb=short 2>&1; echo "E2=$?"
+          python -m pytest src/tests/test_security_fixes.py -q --tb=short 2>&1; echo "E3=$?"
+          python -m pytest src/tests/test_state.py -q --tb=short 2>&1; echo "E4=$?"
+          python -m pytest src/tests/test_config.py -q --tb=short 2>&1; echo "E5=$?"
+          python -m pytest src/tests/test_utils.py -q --tb=short 2>&1; echo "E6=$?"
+          python -m pytest src/tests/test_mcp_gate.py -q --tb=short 2>&1; echo "E7=$?"
+          python -m pytest src/tests/test_core.py -q --tb=short 2>&1; echo "E8=$?"
+          python -m pytest src/tests/test_magic_smoke.py -q --tb=short 2>&1; echo "E9=$?"
+          python -m pytest src/tests/test_decisions.py -q --tb=short 2>&1; echo "E10=$?"
