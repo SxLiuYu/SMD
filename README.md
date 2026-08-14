@@ -176,7 +176,7 @@ export TAVILY_API_KEY="your-tavily-key"
 
 ### 完整 Matt Pocock Skills (36 个)
 
-所有 Matt Pocock Skills 保留在 `.agents/skills/` 目录，SMD 自动调用上述 11 个核心 skills，其他 skills 可手动调用。
+所有 Matt Pocock Skills 保留在 `.agents/skills/` 目录，SMD 自动调用上述 13 个核心 skills，其他 skills 可手动调用。
 
 ---
 
