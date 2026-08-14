@@ -1,0 +1,32 @@
+# Charlie CI 依赖 — 非固定版本，适合 CI 环境
+# 核心运行时依赖
+fastapi
+uvicorn
+starlette
+sse-starlette
+pydantic
+pydantic-settings
+python-dotenv
+python-multipart
+requests
+httpx
+aiohttp
+websockets
+websocket-client
+numpy
+openai
+tiktoken
+qwen-agent
+mcp
+PyJWT
+cryptography
+dashscope
+psutil
+typer
+rich
+pillow
+pygments
+jsonschema
+jsonlines
+regex
+pytest
