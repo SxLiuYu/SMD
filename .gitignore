@@ -112,3 +112,7 @@ u2-tts-pro
 browser_actions.py
 u2-asr-pro/
 u2-tts-pro/
+
+src/skills/mimo-vision/
+src/skills/u2-asr-pro/
+src/skills/u2-tts-pro/
