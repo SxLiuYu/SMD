@@ -149,13 +149,14 @@ jobs:
 
       - name: 构建公版固件 (OOTB)
         run: |
+          source $IDF_PATH/export.sh 2>/dev/null || true
           cd esp32-src
           # 使用公版板型配置
           cat > sdkconfig.defaults << 'EOF'
           CONFIG_BOARD_TYPE_XINGZHI_CUBE_1_54TFT_WIFI=y
           CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
           CONFIG_PARTITION_TABLE_CUSTOM=y
-          CONFIG_OTA_URL="https://github.com/SxLiuYu/SMD-v2/releases/latest/download/firmware.bin"
+          CONFIG_OTA_URL="https://github.com/SxLiuYu/SMD/releases/latest/download/firmware.bin"
           EOF
           idf.py build
           mkdir -p ../dist/firmware
