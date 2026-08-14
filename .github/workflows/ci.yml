@@ -17,23 +17,7 @@ jobs:
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest fastapi pydantic python-dotenv requests jsonschema PyJWT cryptography rich pillow
-          python -m pip list
-
-      - name: 调试 - 检查 Python 和路径
-        run: |
-          python --version
-          python -c "import sys; print(sys.path)"
-          ls src/tests/*.py | wc -l
-
-      - name: 调试 - 单个测试文件收集
-        run: |
-          python -m pytest src/tests/test_intent_rules.py --collect-only -q 2>&1 || true
-          python -m pytest src/tests/test_reminders.py --collect-only -q 2>&1 || true
-          python -m pytest src/tests/test_security_fixes.py --collect-only -q 2>&1 || true
-
-      - name: 调试 - 全量收集
-        run: python -m pytest src/tests --collect-only -q 2>&1 || true
+          python -m pip install pytest fastapi uvicorn starlette sse-starlette pydantic pydantic-settings python-dotenv requests httpx aiohttp numpy openai tiktoken qwen-agent mcp PyJWT cryptography dashscope psutil typer rich pillow jsonschema regex
 
       - name: 运行测试
         run: python -m pytest src/tests -q --ignore=src/tests/test_voice_server.py --ignore=src/tests/test_voice_agent.py --ignore=src/tests/test_xiaozhi_ws.py --ignore=src/tests/test_model_download.py --ignore=src/tests/test_runtime_resilience.py --tb=short
