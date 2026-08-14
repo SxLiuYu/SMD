@@ -91,3 +91,13 @@ charlie/skills/*/.env
 
 # 旧格式 skills 目录（已迁移到 .agents/skills/）
 skills/
+
+# Large model files
+src/models/*.onnx
+src/web/vosk/**/*.mdl
+src/web/vosk/**/*.fst
+src/web/vosk/**/*.ie
+src/web/vosk/**/*.mat
+src/web/vosk/**/*.stats
+src/web/vosk/**/*.conf
+
