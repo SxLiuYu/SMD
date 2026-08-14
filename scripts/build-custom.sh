@@ -34,9 +34,17 @@ echo "[1/5] 安装构建依赖..."
 pip install pyinstaller --quiet 2>/dev/null || true
 pip install -r config/requirements/requirements.txt --quiet 2>/dev/null || true
 
-# 3. 运行测试
+# 3. 运行测试（仅纯逻辑测试，跳过需要 Opus/LLM/网络的集成测试）
 echo "[2/5] 运行测试..."
-python -m pytest src/tests/ -q --tb=short 2>&1 | tail -5 || {
+python -m pytest \
+  src/tests/test_intent_rules.py \
+  src/tests/test_reminders.py \
+  src/tests/test_security_fixes.py \
+  src/tests/test_state.py \
+  src/tests/test_config.py \
+  src/tests/test_utils.py \
+  src/tests/test_mcp_gate.py \
+  -q --tb=short 2>&1 | tail -3 || {
   echo "⚠️ 部分测试失败，继续构建..."
 }
 
