@@ -90,7 +90,7 @@ charlie/skills/*/.env
 !README.md
 
 # 旧格式 skills 目录（已迁移到 .agents/skills/）
-skills/
+./skills/
 
 # Large model files — 不纳入 git（通过 scripts/download-models.sh 下载）
 src/models/
@@ -107,3 +107,8 @@ config/cert/
 
 # OOTB 是构建产物（由 scripts/build-ootb.sh 生成）
 OOTB/
+u2-asr-pro
+u2-tts-pro
+browser_actions.py
+u2-asr-pro/
+u2-tts-pro/
