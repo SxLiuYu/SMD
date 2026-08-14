@@ -895,6 +895,12 @@ def _reminder_scheduler():
                 rid = reminder.get("id", 0)
                 text = reminder.get("text", "提醒")
                 due_str = reminder.get("due", "")
+                # 跳过无意义的编号提醒和调度器重试提醒，避免垃圾通知
+                import re as _re_sched
+                if _re_sched.match(r'^提醒\s*\d*$|^闹钟\s*\d*$|^定时\s*\d*$|^调度器重试', (text or "").strip()):
+                    log.warning(f"[reminder] 跳过无意义提醒(id={rid}): {text}")
+                    complete_reminder_delivery(rid)
+                    continue
                 log.info(f"[reminder] 提醒到期(id={rid}): {text} (due={due_str})")
                 # 先推文字通知（前端显示气泡），再推语音（避免只听到声音看不到内容）
                 _add_notification(f"⏰ 提醒：{text}", "reminder")
@@ -1738,11 +1744,14 @@ async def add_reminder(req: ReminderRequest):
     if time_str:
         from utils import parse_time_str
         due = parse_time_str(time_str)
-    if repeat:
-        item = append_reminder(text, time_str, due, repeat=repeat)
-    else:
-        # 不带 repeat 参数 → 原子事务默认不重复
-        item = append_reminder(text, time_str, due)
+    try:
+        if repeat:
+            item = append_reminder(text, time_str, due, repeat=repeat)
+        else:
+            # 不带 repeat 参数 → 原子事务默认不重复
+            item = append_reminder(text, time_str, due)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     rid = item["id"]
     when = f"，提醒时间{due.replace('T', ' ')}" if due else (f"（时间'{time_str}'未解析出时刻）" if time_str else "")
     repeat_desc = {"daily": "（每天重复）", "weekly": "（每周重复）", "weekdays": "（工作日重复）"}.get(repeat, "")

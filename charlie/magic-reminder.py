@@ -1,12 +1,30 @@
 """magic-reminder: 提醒/定时器/日历 (3个工具)"""
 from app.magic_base import create_magic_mcp, get_magic_logger
+import re as _re
 log = get_magic_logger("magic")
 mcp = create_magic_mcp("magic-reminder")
+
+# 拒绝无意义的提醒名称（纯数字编号、纯"提醒"等）
+_RE_GENERIC_NAME = _re.compile(r'^提醒\s*\d*$|^remind\s*\d*$|^闹钟\s*\d*$|^定时\s*\d*$|^alarm\s*\d*$', _re.IGNORECASE)
+
+
+def _validate_reminder_name(name: str) -> str | None:
+    """验证提醒名称是否有效。返回错误消息或 None（通过）。"""
+    name = (name or "").strip()
+    if not name:
+        return "提醒内容不能为空"
+    if len(name) < 2:
+        return "提醒内容太短，至少需要2个字"
+    if _RE_GENERIC_NAME.match(name):
+        return f"提醒名称'{name}'太模糊，请使用有意义的描述（如'该吃药了'而不是'{name}'）"
+    if len(name) > 200:
+        return "提醒内容不能超过200字"
+    return None
 
 
 @mcp.tool()
 def add_reminder(text: str, time: str = "", repeat: str = "") -> str:
-    log.info(f"[reminder] add_reminder(text={text}, time={time_str})")
+    log.info(f"[reminder] add_reminder(text={text}, time={time})")
     """添加提醒。text=提醒内容, time=时间(如'下午3点'/'30分钟后'/'每天8点'), repeat=重复类型(daily/weekly/weekdays, 留空=一次性)
 
     repeat 值:
@@ -15,6 +33,10 @@ def add_reminder(text: str, time: str = "", repeat: str = "") -> str:
     - weekly: 每周重复
     - weekdays: 工作日(周一到周五)重复
     """
+    err = _validate_reminder_name(text)
+    if err:
+        return err
+
     from utils import parse_time_str
     from app.reminders import append_reminder
 
@@ -30,7 +52,7 @@ def add_reminder(text: str, time: str = "", repeat: str = "") -> str:
             repeat_clean = "weekly"
         elif "工作日" in time:
             repeat_clean = "weekdays"
-    time_clean = time
+    time_clean = time or ""
     for w in ("每天", "每日", "每周", "工作日"):
         time_clean = time_clean.replace(w, "")
     if not time_clean.strip():
@@ -112,6 +134,9 @@ def schedule_task(name: str, time: str, action: str = "remind") -> str:
         schedule_task("吃药", "明天8点") → 明天8点提醒吃药
         schedule_task("休息", "30分钟后") → 30分钟后提醒休息
     """
+    err = _validate_reminder_name(name)
+    if err:
+        return err
     try:
         from datetime import datetime as _dt, timedelta as _td
         from app.reminders import append_reminder
@@ -138,10 +163,17 @@ def list_alarms() -> str:
         from app.reminders import _load_reminders
         reminders = _load_reminders()
         active = [r for r in reminders if not r.get("done")]
-        if not active:
+        # 过滤无意义的编号提醒，避免污染 LLM 上下文
+        filtered = []
+        for r in active:
+            text = (r.get("text", "") or "").strip()
+            if _RE_GENERIC_NAME.match(text):
+                continue
+            filtered.append(r)
+        if not filtered:
             return "当前没有闹钟或定时任务。"
-        lines = [f"共 {len(active)} 个闹钟/定时任务："]
-        for r in active[:10]:
+        lines = [f"共 {len(filtered)} 个闹钟/定时任务："]
+        for r in filtered[:10]:
             text = r.get("text", "")
             due = r.get("due", "")[:19].replace("T", " ")
             repeat = " 🔄" if r.get("repeat") else ""

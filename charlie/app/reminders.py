@@ -2,13 +2,19 @@
 
 REMINDERS_FILE 路径基于项目根(app的上级目录). 7天前已完成的提醒自动清理.
 """
-import os, json, logging, copy, tempfile, datetime as dt
+import os, json, logging, copy, tempfile, datetime as dt, re as _re_rem
 try:
     import fcntl
 except ImportError:  # Windows 无 fcntl
     import fcntl_compat as fcntl
 from contextlib import contextmanager
 log = logging.getLogger("magic")
+
+# 拒绝无意义的提醒名称 — 最后防线，拦截所有入口的垃圾提醒
+_RE_GENERIC_REMINDER = _re_rem.compile(
+    r'^提醒\s*\d*$|^remind\s*\d*$|^闹钟\s*\d*$|^定时\s*\d*$|^alarm\s*\d*$|^调度器重试',
+    _re_rem.IGNORECASE,
+)
 
 PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.environ.get("ASSISTANT_KID_DATA_DIR", PROJECT_DIR)
@@ -234,7 +240,16 @@ def append_reminder(text: str, time_str: str = "", due: str | None = None, repea
 
     去重：已存在相同 text + repeat + due(±60s) 的未完成提醒时，复用已有项，
     防止晚安场景重复触发导致同内容多份提醒堆积。
+
+    验证：拒绝无意义的编号提醒（"提醒7"、"闹钟3"等），防止 LLM 反馈循环产生垃圾。
     """
+    text = (text or "").strip()
+    if not text or len(text) < 2:
+        raise ValueError("提醒内容不能为空或太短（至少2个字）")
+    if _RE_GENERIC_REMINDER.match(text):
+        raise ValueError(f"提醒名称'{text}'太模糊，请使用有意义的描述（如'该吃药了'而不是'{text}'）")
+    if len(text) > 200:
+        raise ValueError("提醒内容不能超过200字")
     now = dt.datetime.now()
     with _locked_reminders():
         reminders = _read_locked_reminders()

@@ -214,6 +214,8 @@ def _set_reminder(text: str, time_str: str = "") -> str:
         due = parse_time_str(time_str) if time_str else None
         append_reminder(text, time_str or "", due or "")
         return f"已设提醒：{text}"
+    except ValueError as e:
+        return str(e)
     except Exception as e:
         return f"提醒设置失败: {e}"
 

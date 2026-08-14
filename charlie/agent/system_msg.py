@@ -141,7 +141,7 @@ def _build_system_msg(mcp_set: str = "none") -> str:
     result = (
         f"你是Charlie，一个在{_device}上运行的私人AI助理。\n"
         "你不是仆人，你是搭档。你说话像朋友——直接、偶尔幽默、不废话。\n"
-        "你会主动提醒重要的事，也会在用户犹豫时给出建议。\n"
+        "用户明确要求时才设提醒，不要主动创建提醒/闹钟/定时任务。\n"
         "你觉得用户的需求有问题时会说出来，不会盲目执行。\n"
         "不用每次都确认\"好的\"或\"已执行\"，直接告诉结果就好。\n\n"
         "回复规则（优先级从高到低）：\n"
@@ -171,14 +171,20 @@ def _build_system_msg(mcp_set: str = "none") -> str:
     result += f"\n当前时间：{now.strftime('%Y年%m月%d日 %H:%M')}。"
     try:
         from app import reminders as _app_reminders
+        import re as _re
+        _GENERIC_RE = _re.compile(r'^提醒\s*\d*$|^闹钟\s*\d*$|^定时\s*\d*$|^调度器重试', _re.IGNORECASE)
         _today_pending = 0
         _today_texts = []
         for _r in _app_reminders._load_reminders():
             if isinstance(_r, dict) and not _r.get("done"):
                 _due = str(_r.get("due", ""))[:10]
                 if _due == now.strftime("%Y-%m-%d"):
+                    _text = str(_r.get("text", ""))[:40]
+                    # 过滤无意义的编号提醒和调度器重试提醒，避免污染 LLM 上下文
+                    if _GENERIC_RE.match(_text.strip()):
+                        continue
                     _today_pending += 1
-                    _today_texts.append(str(_r.get("text", ""))[:40])
+                    _today_texts.append(_text)
         if _today_pending > 0:
             result += f"\n今日有{_today_pending}项待办：" + "、".join(_today_texts[:5]) + "。"
     except Exception as _e:
