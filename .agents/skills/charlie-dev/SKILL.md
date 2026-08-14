@@ -1,5 +1,5 @@
 ---
-name: smd
+name: charlie-dev
 description: "CharlieDev (Charlie Smart Development) - 自动需求分类 + Matt Pocock Skills 组合 + 并行执行。当用户提到开发任务、代码重构、bug 修复、功能实现时使用。"
 metadata:
   version: "3.0"
