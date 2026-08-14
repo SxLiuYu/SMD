@@ -1,13 +1,13 @@
 ---
 name: smd
-description: "SMD (Smart Development) - 自动需求分类 + Matt Pocock Skills 组合 + 并行执行。当用户提到开发任务、代码重构、bug 修复、功能实现时使用。"
+description: "CharlieDev (Charlie Smart Development) - 自动需求分类 + Matt Pocock Skills 组合 + 并行执行。当用户提到开发任务、代码重构、bug 修复、功能实现时使用。"
 metadata:
   version: "3.0"
   date: "2026-08-14"
   author: "sxliuyu"
 ---
 
-# SMD - Smart Development System
+# CharlieDev - Charlie Smart Development System
 
 结合 **oh-my-opencode 多 Agent 协作** + **Matt Pocock Skills** + **多模型配置**。
 

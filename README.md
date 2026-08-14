@@ -1,4 +1,4 @@
-# SMD - Smart Development System
+# CharlieDev - Charlie Smart Development System
 
 > Charlie 智能开发系统 - 自动需求分类 + Matt Pocock Skills 组合 + 并行执行 + Grilling 决策工作流
 
@@ -35,7 +35,7 @@ node scripts/charlie-smart-dev.js "评估 voice_agent.py 的代码质量"
 node scripts/charlie-smart-dev.js "实现新的天气查询功能"
 node scripts/charlie-smart-dev.js "修复 ASR 识别率低的问题"
 node scripts/charlie-smart-dev.js "重构 MCP 注册表模块"
-node scripts/charlie-smart-dev.js "评估并优化 smd 系统"
+node scripts/charlie-smart-dev.js "评估并优化 charlie-dev 系统"
 ```
 
 ### 其他命令
@@ -156,7 +156,7 @@ export TAVILY_API_KEY="your-tavily-key"
 
 ## 📦 Skills 目录
 
-### SMD 核心 Skills (13 个)
+### CharlieDev 核心 Skills (13 个)
 
 | Skill | 用途 | 使用场景 |
 |-------|------|---------|
@@ -176,7 +176,7 @@ export TAVILY_API_KEY="your-tavily-key"
 
 ### 完整 Matt Pocock Skills (36 个)
 
-所有 Matt Pocock Skills 保留在 `.agents/skills/` 目录，SMD 自动调用上述 13 个核心 skills，其他 skills 可手动调用。
+所有 Matt Pocock Skills 保留在 `.agents/skills/` 目录，CharlieDev 自动调用上述 13 个核心 skills，其他 skills 可手动调用。
 
 ---
 
