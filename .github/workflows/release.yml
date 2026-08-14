@@ -45,7 +45,7 @@ jobs:
             src/tests/test_core.py src/tests/test_magic_smoke.py \
             src/tests/test_security_fixes.py src/tests/test_state.py \
             src/tests/test_decisions.py src/tests/test_config.py \
-            src/tests/test_utils.py -q --tb=short
+            src/tests/test_utils.py -q --ignore=src/tests/old --tb=short
 
       - name: 语法检查
         run: python -m compileall -q src/ -x '.*/tests/.*|.*/models/.*|.*/web/.*|.*/__pycache__/.*'
