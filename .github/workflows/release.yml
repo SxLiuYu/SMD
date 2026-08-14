@@ -149,7 +149,9 @@ jobs:
 
       - name: 构建公版固件 (OOTB)
         run: |
-          source $IDF_PATH/export.sh 2>/dev/null || true
+          # ESP-IDF 容器中的工具链路径
+          export IDF_PATH=/opt/esp/idf
+          source $IDF_PATH/export.sh
           cd esp32-src
           # 使用公版板型配置
           cat > sdkconfig.defaults << 'EOF'
