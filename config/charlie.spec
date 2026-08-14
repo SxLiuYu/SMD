@@ -1,20 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Charlie 语音助手 — PyInstaller spec 文件
+Charlie 语音助手 — PyInstaller spec 文件（适配 src/ 重组结构）
 
-构建命令:
-    # macOS (当前机器)
-    pyinstaller charlie.spec
-
-    # Windows (需在 Windows 机器上运行)
-    pyinstaller charlie.spec
+构建命令（在项目根目录执行）:
+    pyinstaller config/charlie.spec --distpath dist --workpath build
 
 输出:
     dist/charlie/            # 目录模式 (启动快, 体积小)
-    dist/charlie/charlie     # 可执行文件 (macOS)
+    dist/charlie/charlie     # 可执行文件 (macOS/Linux)
     dist/charlie/charlie.exe # 可执行文件 (Windows)
 """
-
 import os
 import sys
 import platform
@@ -22,12 +17,18 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
+# 项目根目录（spec 在 config/ 下，根目录是上一级）
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(ROOT, "src")
+os.chdir(ROOT)  # PyInstaller 在项目根运行，datas 相对路径以此为基准
+
 # 收集所有隐式依赖的 Python 包
 hidden_imports = [
-    # MCP 子进程模块 — 注意: 源码文件名带连字符(magic-info.py), Python 无法直接 import,
-    # 运行时用 importlib.util.spec_from_file_location 按路径加载, 这里只放能直接 import 的
-    'baize_skills_mcp', 'mcp_ir_control',
-    'mcp_common', 'app.audio', 'app.brain_health', 'app.state',
+    # MCP 子进程模块
+    'skills.mcp_ir_control', 'skills.mcp_common',
+    'integrations.baize_skills_mcp', 'integrations.tuya_api',
+    'integrations.tuya_proxy', 'integrations.personalized_push',
+    'app.audio', 'app.brain_health', 'app.state',
     'app.reminders', 'app.config', 'app.env_catalog', 'app.preflight',
     'app.cert', 'app.mcp_gate', 'utils',
     # qwen_agent 隐式依赖
@@ -58,64 +59,53 @@ hidden_imports = [
     'fcntl_compat',
 ]
 
-# 收集数据文件 (前端HTML, 模板, 配置)
+# 收集数据文件（前端 HTML, 模板, 配置）
 datas = [
-    ('web', 'web'),                    # 前端静态文件 (voice/setup/welcome/esp32_setup)
-    ('app', 'app'),                    # app 模块数据
-    ('scripts', 'scripts'),            # gen-cert.sh, download-models.sh
-    # 注: skills/ 下的 u2-asr-pro/u2-tts-pro 是 ClawHub 技能，Charlie 不加载，不打包
-    ('.env.example', '.'),             # 配置模板
-    ('fcntl_compat.py', '.'),          # Windows fcntl 垫片
-    # ESP32 干净固件（已擦除 NVS，无任何 WiFi/服务器信息；用户通过 AP 热点门户配网）
-    ('../firmware/charlie-esp32-flash-16MB.bin', 'firmware'),
-    # MCP 源码文件 (文件名带连字符, 无法作为模块 import, 需作为数据文件打包, 运行时按路径加载)
-    ('magic-info.py', '.'),
-    ('magic-music.py', '.'),
-    ('magic-reminder.py', '.'),
-    ('magic-notes.py', '.'),
-    ('magic-system.py', '.'),
-    ('magic-life.py', '.'),
-    ('magic-scenes.py', '.'),
-    ('magic-evolution.py', '.'),
-    ('magic-summary.py', '.'),
-    ('magic-wardrobe.py', '.'),
-    ('magic-browser.py', '.'),
-    ('magic-apps.py', '.'),
-    ('magic-feishu.py', '.'),
-    ('magic-douyin.py', '.'),
-    ('magic-taobao.py', '.'),
-    ('magic-recipe.py', '.'),
-    ('magic-decisions.py', '.'),       # 自主决策引擎(原遗漏)
-    ('baize_skills_mcp.py', '.'),
-    ('mcp_ir_control.py', '.'),
+    # 前端静态文件
+    (os.path.join(SRC, 'web'), 'web'),
+    # app 模块
+    (os.path.join(SRC, 'app'), 'app'),
+    # agent 模块
+    (os.path.join(SRC, 'agent'), 'agent'),
+    # skills 模块（MCP 技能，文件名带连字符需作为数据文件打包）
+    (os.path.join(SRC, 'skills'), 'skills'),
+    # integrations 模块
+    (os.path.join(SRC, 'integrations'), 'integrations'),
+    # hardware 模块
+    (os.path.join(SRC, 'hardware'), 'hardware'),
+    # 配置模板
+    (os.path.join(ROOT, '.env.example'), '.'),
+    # Windows fcntl 垫片
+    (os.path.join(SRC, 'fcntl_compat.py'), '.'),
+    # 工具脚本
+    (os.path.join(ROOT, 'scripts'), 'scripts'),
+    # ESP32 干净固件（已擦除 NVS）
+    (os.path.join(ROOT, 'dist', 'firmware'), 'firmware'),
 ]
 
 # 收集隐式依赖的包数据
 for pkg in ['qwen_agent', 'mcp', 'fastapi', 'starlette', 'uvicorn', 'sse_starlette', 'webview', 'pythonnet',
-            # esptool：应用内 ESP32 烧录向导需要（含 reedsolo/pyserial/bitstring 等子依赖）
+            # esptool：应用内 ESP32 烧录向导需要
             'esptool', 'reedsolo', 'serial', 'bitstring', 'intelhex']:
     pkg_data = collect_data_files(pkg)
     datas.extend(pkg_data)
     hidden_imports.extend(collect_submodules(pkg))
 
-# 排除 __pycache__ / .pyc，避免把已删除模块的陈旧字节码（如 nvs_patch）打进包
+# 排除 __pycache__ / .pyc
 def _is_cache(src, dest):
     return '__pycache__' in src.replace('\\', '/').split('/') or src.endswith(('.pyc', '.pyo'))
-datas = [(s, d) for (s, d) in datas if not _is_cache(s, d)]
+datas = [(s, d) for (s, d) in datas if not _is_cache(s, d) and os.path.exists(s)]
 
-# ffmpeg 二进制文件 (从系统中查找)
+# ffmpeg 二进制文件（从系统查找）
 def _find_ffmpeg():
-    """查找系统 ffmpeg 路径"""
     import shutil
     path = shutil.which('ffmpeg')
     if path:
         return path
-    # macOS 常见路径 (homebrew Intel 和 M系列, 以及系统安装)
     for p in ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg',
               '/usr/bin/ffmpeg', '/opt/local/bin/ffmpeg']:
         if os.path.isfile(p):
             return p
-    # Windows 常见路径
     if platform.system() == 'Windows':
         for p in [r'C:\ffmpeg\bin\ffmpeg.exe', r'C:\Program Files\ffmpeg\bin\ffmpeg.exe']:
             if os.path.isfile(p):
@@ -123,12 +113,10 @@ def _find_ffmpeg():
     return None
 
 def _find_ncm():
-    """查找系统的 ncm-cli 路径"""
     import shutil
     path = shutil.which('ncm')
     if path:
         return path
-    # 常见路径
     for p in [os.path.expanduser('~/.local/bin/ncm'), '/usr/local/bin/ncm']:
         if os.path.isfile(p):
             return p
@@ -140,17 +128,11 @@ if ffmpeg_path:
     print(f"[spec] 找到 ffmpeg: {ffmpeg_path}")
 else:
     print("[spec] ⚠️ 未找到 ffmpeg，音频转码将不可用！")
-    print("[spec]   macOS: brew install ffmpeg")
-    print("[spec]   Windows: choco install ffmpeg 或手动下载")
 
 ncm_path = _find_ncm()
 if ncm_path:
     datas.append((ncm_path, 'bin'))
     print(f"[spec] 找到 ncm: {ncm_path}")
-else:
-    print("[spec] ⚠️ 未找到 ncm-cli，音乐播放将不可用！")
-    print("[spec]   macOS: pip install ncm-cli")
-    print("[spec]   Windows: pip install ncm-cli")
 
 binaries = []
 if ffmpeg_path:
@@ -160,8 +142,8 @@ if ncm_path:
 binaries = [(s, d) for (s, d) in binaries if not _is_cache(s, d)]
 
 a = Analysis(
-    ['charlie_main.py'],
-    pathex=['.'],
+    [os.path.join(SRC, 'charlie_main.py')],
+    pathex=[SRC],
     binaries=binaries,
     datas=datas,
     hiddenimports=hidden_imports,
@@ -193,13 +175,13 @@ exe = EXE(
     strip=False,
     upx=True,
     upx_exclude=['*.pyd', 'pythonnet*', '*pythonnet*', '*WebView2*', '*clr*',
-                 'pycaw*', '*pycaw*', 'comtypes*', '*comtypes*'],  # 压这些会崩
-    console=False,  # 原生桌面窗口模式（不弹控制台黑框）
+                 'pycaw*', '*pycaw*', 'comtypes*', '*comtypes*'],
+    console=False,  # 原生桌面窗口模式
     disable_windowed_traceback=False,
     target_architecture=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='charlie.ico',
+    icon=os.path.join(ROOT, 'config', 'charlie.ico'),
 )
 
 coll = COLLECT(

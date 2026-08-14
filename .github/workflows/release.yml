@@ -1,0 +1,216 @@
+name: CI/CD — 多平台构建 + 测试 + Release
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_esp32:
+        description: '构建 ESP32 固件'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 测试 ──
+  test:
+    name: 测试 (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 安装依赖
+        run: pip install -r config/requirements/requirements.txt pytest
+
+      - name: 运行测试
+        run: python -m pytest src/tests/ -q --tb=short
+
+      - name: 语法检查
+        run: python -m compileall -q src/
+
+  # ── macOS 构建 ──
+  build-macos:
+    name: 构建 macOS
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: |
+          brew install ffmpeg || true
+          pip install -r config/requirements/requirements.txt pyinstaller
+
+      - name: 构建 OOTB 版
+        run: bash scripts/build-release.sh macos
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: charlie-macos
+          path: dist/release/macos/Charlie-*.zip
+
+  # ── Windows 构建 ──
+  build-windows:
+    name: 构建 Windows
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: pip install -r config/requirements/requirements.txt pyinstaller
+
+      - name: 构建 OOTB 版
+        shell: bash
+        run: bash scripts/build-release.sh windows
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: charlie-windows
+          path: dist/release/windows/Charlie-*.zip
+
+  # ── Linux 构建 ──
+  build-linux:
+    name: 构建 Linux
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg portaudio19-dev python3-dev
+          pip install -r config/requirements/requirements.txt pyinstaller
+
+      - name: 构建 OOTB 版
+        run: bash scripts/build-release.sh linux
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: charlie-linux
+          path: dist/release/linux/Charlie-*.zip
+
+  # ── ESP32 固件构建 ──
+  build-esp32:
+    name: 构建 ESP32 固件
+    needs: test
+    if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.build_esp32 == 'true')
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.1.4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: '78/xiaozhi-esp32'
+          ref: 'main'
+          path: 'esp32-src'
+
+      - name: 构建公版固件 (OOTB)
+        run: |
+          cd esp32-src
+          # 使用公版板型配置
+          cat > sdkconfig.defaults << 'EOF'
+          CONFIG_BOARD_TYPE_XINGZHI_CUBE_1_54TFT_WIFI=y
+          CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+          CONFIG_PARTITION_TABLE_CUSTOM=y
+          CONFIG_OTA_URL="https://github.com/SxLiuYu/SMD-v2/releases/latest/download/firmware.bin"
+          EOF
+          idf.py build
+          mkdir -p ../dist/firmware
+          cp build/bootloader/bootloader.bin ../dist/firmware/
+          cp build/partition_table/partition-table.bin ../dist/firmware/
+          cp build/ota_data_initial.bin ../dist/firmware/
+          cp build/charlie-esp32.bin ../dist/firmware/
+
+      - name: 上传固件产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: dist/firmware/
+
+  # ── GitHub Release ──
+  release:
+    name: 发布 Release
+    needs: [build-macos, build-windows, build-linux, build-esp32]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/release/
+
+      - name: 合并 ESP32 固件
+        if: needs.build-esp32.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: esp32-firmware
+          path: dist/firmware/
+        continue-on-error: true
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Charlie ${{ github.ref_name }}"
+          body: |
+            ## Charlie 语音助手 ${{ github.ref_name }}
+
+            ### 📦 下载
+
+            | 平台 | 文件 |
+            |------|------|
+            | 🍎 macOS | `Charlie-${{ github.ref_name }}-macos.zip` |
+            | 🪟 Windows | `Charlie-${{ github.ref_name }}-windows.zip` |
+            | 🐧 Linux | `Charlie-${{ github.ref_name }}-linux.zip` |
+
+            ### 🔌 ESP32 固件
+
+            通过 AP 热点配网，零代码烧录。
+
+            ### 🚀 快速开始
+
+            1. 下载对应平台的 ZIP
+            2. 解压，编辑 `.env.example` → `.env` 填入 API 密钥
+            3. 双击 `charlie`（macOS/Linux）或 `charlie.exe`（Windows）
+            4. 浏览器访问 http://localhost:8000
+
+            ### 📋 变更
+
+            见 [CHANGELOG.md](CHANGELOG.md)
+          files: |
+            dist/release/**/Charlie-*.zip
+            dist/firmware/*.bin
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+          generate_release_notes: true

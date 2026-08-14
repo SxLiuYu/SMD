@@ -8,22 +8,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: charlie/charlie
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
       - name: 安装依赖
-        run: pip install -r requirements.txt pytest
+        run: pip install -r config/requirements/requirements.txt pytest
 
-      - name: 运行全量测试
-        run: python -m pytest tests/ -q
+      - name: 运行测试
+        run: python -m pytest src/tests/ -q --tb=short
 
       - name: 语法检查
-        run: python -m compileall -q voice_server.py voice_agent.py local_wake.py presence.py magic-*.py app/
+        run: python -m compileall -q src/
