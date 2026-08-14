@@ -15,7 +15,7 @@ numpy
 openai
 tiktoken
 qwen-agent
-mcp
+mcp<2.0
 PyJWT
 cryptography
 dashscope
@@ -24,6 +24,5 @@ typer
 rich
 pillow
 jsonschema
-jsonlines
 regex
 pytest
