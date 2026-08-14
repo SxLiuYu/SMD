@@ -14,14 +14,30 @@
 
 ## 📂 项目结构
 
-本项目采用**双版本架构**：
+```
+charlie/                      # 项目根
+├── src/                      # 源码
+│   ├── voice_server.py       # FastAPI 主服务
+│   ├── voice_agent.py        # 大脑引擎
+│   ├── agent/                # Agent 子模块
+│   ├── app/                  # 应用子模块
+│   ├── skills/               # MCP 技能（20 个 magic-*）
+│   ├── integrations/         # 第三方集成（Tuya/飞书/推送）
+│   ├── hardware/             # 硬件相关（ESP32/唤醒/存在检测）
+│   ├── tests/                # 测试
+│   └── web/                  # 前端页面
+├── charlie/                  # 运行时环境（.venv/.env）
+├── data/                     # 运行时数据
+├── docs/                     # 文档
+├── config/                   # 构建/部署配置
+├── scripts/                  # 工具脚本
+│   └── build-ootb.sh         # 构建 OOTB 分发版
+└── OOTB/                     # 分发版（由 build-ootb.sh 生成）
+```
 
-| 版本 | 说明 | 路径 |
-|------|------|------|
-| **OOTB（开箱即用）** | 分发版本，无密钥，零配置运行 | `OOTB/` |
-| **CUSTOM（自用定制）** | 开发版本，含所有密钥和个人配置 | `CUSTOM/` + 主目录 |
+**双版本架构**：OOTB 由 `bash scripts/build-ootb.sh` 从 `src/` 自动生成，无需手动维护副本。
 
-完整结构说明见 [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+完整结构说明见 [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
 
 ---
 

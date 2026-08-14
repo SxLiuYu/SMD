@@ -109,3 +109,6 @@ data/logs/
 data/notes/
 dist/
 config/cert/
+
+# OOTB 是构建产物（由 scripts/build-ootb.sh 生成）
+OOTB/
