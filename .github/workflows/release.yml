@@ -149,9 +149,6 @@ jobs:
 
       - name: 构建公版固件 (OOTB)
         run: |
-          # ESP-IDF 容器中的工具链路径
-          export IDF_PATH=/opt/esp/idf
-          source $IDF_PATH/export.sh
           cd esp32-src
           # 使用公版板型配置
           cat > sdkconfig.defaults << 'EOF'
@@ -160,7 +157,8 @@ jobs:
           CONFIG_PARTITION_TABLE_CUSTOM=y
           CONFIG_OTA_URL="https://github.com/SxLiuYu/SMD/releases/latest/download/firmware.bin"
           EOF
-          idf.py build
+          # 直接调用 idf.py（ESP-IDF 容器已在 PATH 中）
+          /opt/esp/idf/tools/idf.py build
           mkdir -p ../dist/firmware
           cp build/bootloader/bootloader.bin ../dist/firmware/
           cp build/partition_table/partition-table.bin ../dist/firmware/
