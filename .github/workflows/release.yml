@@ -37,7 +37,9 @@ jobs:
           sudo apt-get install -y -qq ffmpeg portaudio19-dev 2>/dev/null || true
 
       - name: 安装依赖
-        run: python -m pip install pytest fastapi uvicorn starlette sse-starlette pydantic pydantic-settings python-dotenv requests httpx aiohttp numpy openai tiktoken qwen-agent mcp PyJWT cryptography dashscope psutil typer rich pillow jsonschema regex
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --break-system-packages -r config/requirements/requirements-ci.txt
 
       - name: 运行测试
         run: |
