@@ -126,14 +126,14 @@ def _find_ncm():
 ffmpeg_path = _find_ffmpeg()
 if ffmpeg_path:
     datas.append((ffmpeg_path, 'bin'))
-    print(f"[spec] 找到 ffmpeg: {ffmpeg_path}")
+    print(f"[spec] Found ffmpeg: {ffmpeg_path}")
 else:
-    print("[spec] ! 未找到 ffmpeg，音频转码将不可用！")
+    print("[spec] ! ffmpeg not found, audio transcoding unavailable!")
 
 ncm_path = _find_ncm()
 if ncm_path:
     datas.append((ncm_path, 'bin'))
-    print(f"[spec] 找到 ncm: {ncm_path}")
+    print(f"[spec] Found ncm: {ncm_path}")
 
 binaries = []
 if ffmpeg_path:
