@@ -128,7 +128,7 @@ if ffmpeg_path:
     datas.append((ffmpeg_path, 'bin'))
     print(f"[spec] 找到 ffmpeg: {ffmpeg_path}")
 else:
-    print("[spec] ⚠️ 未找到 ffmpeg，音频转码将不可用！")
+    print("[spec] ! 未找到 ffmpeg，音频转码将不可用！")
 
 ncm_path = _find_ncm()
 if ncm_path:
