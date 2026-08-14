@@ -50,10 +50,10 @@ build_one() {
 
   # 4. PyInstaller 构建
   echo "[4/4] PyInstaller 构建..."
-  pyinstaller config/charlie.spec \
+  CHRL_ROOT="$(pwd)" pyinstaller config/charlie.spec \
     --distpath "$dist_dir" \
     --workpath build \
-    --noconfirm 2>&1 | tail -10
+    2>&1 | tail -10
 
   # 5. 后处理：复制 .env.example（不含密钥）
   if [ -f "$dist_dir/charlie/_internal/.env.example" ]; then

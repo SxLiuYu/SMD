@@ -54,10 +54,10 @@ rm -rf build/ "$DIST_DIR"
 
 # 5. PyInstaller 构建
 echo "[4/5] PyInstaller 构建..."
-pyinstaller config/charlie.spec \
+  CHRL_ROOT="$(pwd)" pyinstaller config/charlie.spec \
   --distpath "$DIST_DIR" \
   --workpath build \
-  --noconfirm 2>&1 | tail -10
+  2>&1 | tail -10
 
 # 6. 复制 .env（自用版含密钥）
 echo "[5/5] 复制配置..."
