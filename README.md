@@ -2,10 +2,6 @@
 
 > Charlie 智能开发系统 - 自动需求分类 + Matt Pocock Skills 组合 + 并行执行 + Grilling 决策工作流
 
-[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
-[![JavaScript](https://img.shields.io/badge/JavaScript-ES6-yellow.svg)](https://developer.mozilla.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
 ---
 
 ## 📋 概述
@@ -75,24 +71,11 @@ node scripts/charlie-smart-dev.js adr create "标题" "内容"
 
 ---
 
-## 🎯 Grilling 决策工作流
-
-当报告包含待决策问题时，执行 4 阶段工作流：
-
-1. **系统调研** - `research "<主题>"`
-2. **问题分类** - 业务决策→提问用户，技术决策→提供方案
-3. **提问用户** - 一次问完所有业务问题，给出推荐答案
-4. **生成 ADR** - `adr "<标题>" "<内容>"`
-
-参考：`.agents/skills/grilling/SKILL.md`
-
----
-
 ## ⚙️ 配置
 
 ### 模型配置
 
-编辑 `.models.json`（从 `.env.example` 复制）：
+创建 `.models.json`（参考 `.env.example`）：
 
 ```json
 {
@@ -110,19 +93,13 @@ node scripts/charlie-smart-dev.js adr create "标题" "内容"
     "models": {
       "agnes-2.5-flash": "https://api.agnes.ai/v1/chat/completions"
     }
-  },
-  "agnes_cn": {
-    "api_key": "${AGNES_CN_API_KEY}",
-    "models": {
-      "agnes-2.5-flash": "https://api-cn.agnes.ai/v1/chat/completions"
-    }
   }
 }
 ```
 
 ### 搜索配置
 
-编辑 `.smart-dev.json`：
+创建 `.smart-dev.json`：
 
 ```json
 {
@@ -148,7 +125,6 @@ cp .env.example .env
 # 编辑 .env 填入真实 API Keys
 export FINNA_API_KEY="your-finna-key"
 export AGNES_API_KEY="your-agnes-key"
-export AGNES_CN_API_KEY="your-agnes-cn-key"
 export TAVILY_API_KEY="your-tavily-key"
 ```
 
@@ -156,10 +132,11 @@ export TAVILY_API_KEY="your-tavily-key"
 
 ## 📦 Skills 目录
 
-### CharlieDev 核心 Skills (13 个)
+所有 Skills 位于 `.agents/skills/`：
 
 | Skill | 用途 | 使用场景 |
 |-------|------|---------|
+| **charlie-dev** | CharlieDev 核心 skill | 所有开发任务 |
 | code-review | 代码审查 | evaluation, testing |
 | codebase-design | 架构设计 | 所有类型 |
 | grilling | 压力测试/决策 | evaluation, self-evaluation |
@@ -174,29 +151,23 @@ export TAVILY_API_KEY="your-tavily-key"
 | prototype | 快速原型 | development |
 | triage | 优先级排序 | evaluation, development |
 
-### 完整 Matt Pocock Skills (36 个)
-
-所有 Matt Pocock Skills 保留在 `.agents/skills/` 目录，CharlieDev 自动调用上述 13 个核心 skills，其他 skills 可手动调用。
-
 ---
 
 ## 🏗️ 项目结构
 
 ```
-smd/
+charlie-dev/
 ├── scripts/
-│   └── charlie-smart-dev.js    # 主执行脚本
+│   ├── charlie-dev.js          # 传统模式 CLI
+│   ├── charlie-smart-dev.js    # 智能开发主脚本
+│   └── charlie-smart-dev.sh    # Shell 快捷入口
 ├── .agents/
-│   └── skills/                 # Matt Pocock Skills (36 个)
-│       ├── charlie-dev/       # CharlieDev 核心 skill
+│   └── skills/                 # Skills (Matt Pocock + CharlieDev)
+│       ├── charlie-dev/        # CharlieDev 核心 skill
 │       ├── code-review/
 │       ├── tdd/
 │       ├── grilling/
 │       └── ...
-├── docs/
-│   └── adr/                   # Architecture Decision Records
-├── .models.json               # 模型配置
-├── .smart-dev.json            # 搜索配置
 ├── .env.example               # 配置模板
 ├── .gitignore
 └── README.md
@@ -204,39 +175,11 @@ smd/
 
 ---
 
-## 🔧 高级用法
-
-### 自定义模型路由
-
-在 `scripts/charlie-smart-dev.js` 中修改 `taskTemplates`：
-
-```javascript
-{
-  role: '架构师',
-  skill: 'codebase-design',
-  priority: 'high',
-  model: 'finna/deepseek-v4-pro'  // 修改模型
-}
-```
-
-### 添加新 Skills
-
-1. 在 `.agents/skills/` 创建 skill 目录
-2. 添加 `SKILL.md` 文件
-3. 在 CharlieDev 的配置中添加新 skill
-
----
-
 ## 📝 License
 
-MIT License - See [LICENSE](LICENSE) for details.
-
----
+MIT License
 
 ## 🙏 Acknowledgments
 
 - [oh-my-opencode](https://github.com/EvalFall/oh-my-opencode) - 多 Agent 协作框架
 - [Matt Pocock Skills](https://github.com/mattwmaclaren/matt-pocock-skills) - 高质量工程 Skills
-- [DeepSeek](https://deepseek.com) - AI 模型提供商
-- [Finna AI](https://finna.ai) - API 代理服务
-- [Agnes AI](https://agnes.ai) - AI 模型提供商

@@ -7,74 +7,8 @@
 .opencode/
 .zcode/
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.venv/
-
-# Runtime data
-*.log
-*.lock
-conversation_history.json*
-preferences.json*
-reminders.json*
-suggestions_state.json*
-tunnel_url.txt
-audio_000.wav
-logs/
-workspace/
-data/
-notes/
-*.json.lock
-decision_history.json
-episodic_memories.json
-pushed_hot_topics.json
-snapshot.json
-pending_confirmation.json
-
-# 构建产物
-build/
-dist/
-*.zip
-*.aiff
-charlie/web/vosk/
-charlie/skills/mimo-vision/
-
-# Baize build artifacts (source code IS tracked)
-Baize/node_modules/
-Baize/dist/
-Baize/data/
-Baize/logs/
-Baize/coverage/
-Baize/.env
-
-# 营销文案（本地保留，不提交 Git 仓库）
-docs/social-media-帖子内容.md
-docs/social-media/
-# 构建产物 / 本地环境（不提交）
-charlie/dist/
-charlie/build/
-charlie/.env
-charlie/.baidu_token.json
-assistant-kid/
-
-# 运行时缓存
-charlie/.baidu_token*.json
-
-# 交付用 patch / 运行时 token 缓存
-/*.patch
-charlie/.baidu_token*.json
-
-# 图标源
-charlie/charlie.ico
-
-# ESP32 固件镜像（16MB，通过 GitHub Release 分发，不进 git）
-firmware/*.bin
-
-# 技能本地密钥（不进 git）
-charlie/skills/*/.env.local
-charlie/skills/*/.env
+# Node
+node_modules/
 
 # SMD 敏感配置（包含真实 API Keys）
 .models.json
@@ -84,35 +18,3 @@ charlie/skills/*/.env
 
 # DSH 凭证
 .dsh/.credentials.yaml
-
-# 大型二进制文件
-*.zip
-!README.md
-
-# 旧格式 skills 目录（已迁移到 .agents/skills/）
-./skills/
-
-# Large model files — 不纳入 git（通过 scripts/download-models.sh 下载）
-src/models/
-src/web/vosk/
-
-
-# 重组后的目录
-data/*.json
-data/*.lock
-data/logs/
-data/notes/
-dist/
-config/cert/
-
-# OOTB 是构建产物（由 scripts/build-ootb.sh 生成）
-OOTB/
-u2-asr-pro
-u2-tts-pro
-browser_actions.py
-u2-asr-pro/
-u2-tts-pro/
-
-src/skills/mimo-vision/
-src/skills/u2-asr-pro/
-src/skills/u2-tts-pro/
