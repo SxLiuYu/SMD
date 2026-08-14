@@ -88,3 +88,6 @@ charlie/skills/*/.env
 # 大型二进制文件
 *.zip
 !README.md
+
+# 旧格式 skills 目录（已迁移到 .agents/skills/）
+skills/
